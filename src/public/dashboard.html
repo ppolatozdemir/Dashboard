@@ -1,0 +1,3411 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Support Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        /* Theme CSS Variables */
+        :root {
+            /* Dark Theme (default) */
+            --bg-primary: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            --bg-secondary: rgba(255,255,255,0.05);
+            --bg-tertiary: rgba(255,255,255,0.03);
+            --bg-hover: rgba(255,255,255,0.05);
+            --border-color: rgba(255,255,255,0.1);
+            --text-primary: #fff;
+            --text-secondary: rgba(255,255,255,0.6);
+            --text-muted: rgba(255,255,255,0.4);
+            --input-bg: rgba(255,255,255,0.1);
+            --input-border: rgba(255,255,255,0.2);
+            --card-bg: rgba(255,255,255,0.05);
+            --table-header-bg: rgba(67, 97, 238, 0.2);
+            --table-row-hover: rgba(255,255,255,0.05);
+            --select-option-bg: #1a1a2e;
+            --modal-bg: #1e1e2e;
+            --accent-blue: #4361ee;
+            --accent-green: #38b000;
+            --accent-orange: #fb8500;
+            --accent-purple: #9d4edd;
+            --accent-red: #e63946;
+            --accent-pink: #f72585;
+            --accent-cyan: #4cc9f0;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: linear-gradient(135deg, #f5f7fa 0%, #e4e8ed 100%);
+            --bg-secondary: rgba(0,0,0,0.03);
+            --bg-tertiary: rgba(0,0,0,0.02);
+            --bg-hover: rgba(0,0,0,0.05);
+            --border-color: rgba(0,0,0,0.1);
+            --text-primary: #1a1a2e;
+            --text-secondary: rgba(0,0,0,0.6);
+            --text-muted: rgba(0,0,0,0.4);
+            --input-bg: rgba(255,255,255,0.9);
+            --input-border: rgba(0,0,0,0.15);
+            --card-bg: rgba(255,255,255,0.8);
+            --table-header-bg: rgba(67, 97, 238, 0.15);
+            --table-row-hover: rgba(0,0,0,0.03);
+            --select-option-bg: #ffffff;
+            --modal-bg: #ffffff;
+            --accent-blue: #3a56d4;
+            --accent-green: #2d9600;
+            --accent-orange: #e07600;
+            --accent-purple: #8a3cc8;
+            --accent-red: #d32f3f;
+            --accent-pink: #e31b6d;
+            --accent-cyan: #00a8cc;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-primary);
+            min-height: 100vh;
+            color: var(--text-primary);
+            transition: background 0.3s ease, color 0.3s ease;
+        }
+        
+        .header {
+            background: var(--bg-secondary);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* Theme Toggle Button */
+        .theme-toggle {
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            border-radius: 50px;
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-primary);
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            background: var(--bg-hover);
+            transform: scale(1.05);
+        }
+
+        .theme-toggle .icon {
+            font-size: 18px;
+            transition: transform 0.3s ease;
+        }
+
+        .theme-toggle:hover .icon {
+            transform: rotate(20deg);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        select {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        select option {
+            background: var(--select-option-bg);
+            color: var(--text-primary);
+        }
+        
+        .refresh-btn {
+            padding: 10px 20px;
+            background: #4361ee;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #3a56d4;
+        }
+        
+        .refresh-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .screenshot-btn {
+            background: var(--accent-green);
+        }
+        
+        .screenshot-btn:hover {
+            background: #2d9600;
+        }
+        
+        .date-filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .date-input {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .date-input::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        [data-theme="light"] .date-input::-webkit-calendar-picker-indicator {
+            filter: none;
+        }
+        
+        .custom-dates {
+            display: none;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .custom-dates.show {
+            display: flex;
+        }
+        
+        .date-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        
+        .filter-bar {
+            background: var(--bg-tertiary);
+            padding: 15px 40px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        }
+        
+        .filter-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .period-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(67, 97, 238, 0.2);
+            color: #4361ee;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        /* Tab Stilleri */
+        .tab-bar {
+            background: var(--bg-tertiary);
+            padding: 0 40px;
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            padding: 15px 30px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -1px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+            background: rgba(67, 97, 238, 0.1);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Günlük Rapor Stilleri */
+        .daily-report-panel {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            margin: 20px 40px;
+            padding: 25px;
+        }
+
+        .daily-report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .daily-report-header h2 {
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .daily-report-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .daily-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .daily-table th,
+        .daily-table td {
+            padding: 15px 20px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .daily-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+
+        .daily-table th:not(:first-child),
+        .daily-table td:not(:first-child) {
+            text-align: center;
+        }
+
+        .daily-table tbody tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .daily-table .subtotal-row {
+            background: rgba(67, 97, 238, 0.15);
+            font-weight: 700;
+        }
+
+        .daily-table .subtotal-row td {
+            border-top: 2px solid var(--accent-blue);
+        }
+
+        .daily-summary-cards {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .daily-summary-card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            padding: 15px 25px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .daily-summary-card .value {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .daily-summary-card .label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-top: 3px;
+        }
+
+        .daily-summary-card.sprint .value { color: var(--accent-pink); }
+        .daily-summary-card.support .value { color: var(--accent-cyan); }
+        .daily-summary-card.total .value { color: var(--accent-blue); }
+
+        .excluded-status-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .excluded-status-card {
+            background: var(--card-bg);
+            border: 1px solid rgba(251, 133, 0, 0.35);
+            border-radius: 8px;
+            padding: 8px 14px;
+            text-align: center;
+            min-width: 90px;
+        }
+
+        .excluded-status-card .value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent-orange);
+        }
+
+        .excluded-status-card .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* RFR Takip Stilleri */
+        .rfr-layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .rfr-people {
+            flex: 0 0 260px;
+            max-height: 640px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 8px;
+            background: var(--card-bg);
+        }
+
+        .rfr-people-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-secondary);
+            padding: 6px 10px 10px;
+        }
+
+        .rfr-person {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 4px;
+            border: 1px solid transparent;
+        }
+
+        .rfr-person:hover {
+            background: var(--bg-hover);
+        }
+
+        .rfr-person.active {
+            background: rgba(67, 97, 238, 0.18);
+            border-color: var(--accent-blue);
+        }
+
+        .rfr-person .rfr-person-name {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .rfr-person .rfr-badges {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .rfr-badge {
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: rgba(67, 97, 238, 0.25);
+            color: var(--text-primary);
+        }
+
+        .rfr-badge.overdue {
+            background: rgba(230, 57, 70, 0.28);
+            color: var(--accent-red);
+        }
+
+        .rfr-main {
+            flex: 1;
+            min-width: 0;
+            overflow-x: auto;
+        }
+
+        .rfr-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .rfr-table th,
+        .rfr-table td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+
+        .rfr-table th {
+            background: var(--table-header-bg);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .rfr-table tbody tr:hover {
+            background: var(--table-row-hover);
+        }
+
+        .rfr-table tr.rfr-overdue {
+            background: rgba(230, 57, 70, 0.14);
+            box-shadow: inset 3px 0 0 var(--accent-red);
+        }
+
+        .rfr-table tr.rfr-overdue:hover {
+            background: rgba(230, 57, 70, 0.22);
+        }
+
+        .rfr-days {
+            font-weight: 700;
+        }
+
+        .rfr-days.overdue {
+            color: var(--accent-red);
+        }
+
+        .rfr-overdue-tag {
+            display: inline-block;
+            margin-left: 6px;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 8px;
+            background: rgba(230, 57, 70, 0.25);
+            color: var(--accent-red);
+        }
+
+        .rfr-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+
+        .container {
+            padding: 30px 40px;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 400px;
+            font-size: 18px;
+        }
+        
+        .loading-spinner {
+            border: 4px solid var(--border-color);
+            border-left: 4px solid var(--accent-blue);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-right: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .stat-card .label {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+        }
+        
+        .stat-card .sub {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+        
+        .stat-card.blue .value { color: var(--accent-blue); }
+        .stat-card.green .value { color: var(--accent-green); }
+        .stat-card.orange .value { color: var(--accent-orange); }
+        .stat-card.purple .value { color: var(--accent-purple); }
+        .stat-card.red .value { color: var(--accent-red); }
+        
+        .charts-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .chart-card h3 {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .tables-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 25px;
+        }
+        
+        .table-card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 25px;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        .table-card h3 {
+            font-size: 16px;
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        th {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        td {
+            font-size: 14px;
+        }
+        
+        tr:hover td {
+            background: var(--table-row-hover);
+        }
+        
+        .issue-key {
+            color: var(--accent-blue);
+            font-weight: 600;
+        }
+        
+        .time-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .time-badge.slow {
+            background: rgba(230, 57, 70, 0.2);
+            color: #e63946;
+        }
+        
+        .time-badge.fast {
+            background: rgba(56, 176, 0, 0.2);
+            color: #38b000;
+        }
+        
+        .count-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(67, 97, 238, 0.2);
+            color: var(--accent-blue);
+        }
+        
+        .reporter-name {
+            font-weight: 500;
+        }
+        
+        .error-message {
+            background: rgba(230, 57, 70, 0.1);
+            border: 1px solid rgba(230, 57, 70, 0.3);
+            padding: 20px;
+            border-radius: 12px;
+            color: var(--accent-red);
+            text-align: center;
+        }
+        
+        .generated-time {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        
+        .summary-truncate {
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Task Creation Form Styles */
+        .task-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 800px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-input, .form-textarea, .form-select {
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--input-border);
+            background: var(--input-bg);
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .form-input:focus, .form-textarea:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.2);
+        }
+
+        .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form-select option {
+            background: var(--select-option-bg);
+            color: var(--text-primary);
+        }
+
+        .submit-btn {
+            padding: 14px 28px;
+            background: var(--accent-blue);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s, transform 0.2s;
+            align-self: flex-start;
+        }
+
+        .submit-btn:hover {
+            background: #3a56d4;
+            transform: translateY(-2px);
+        }
+
+        .submit-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .created-tasks-list {
+            margin-top: 30px;
+        }
+
+        .created-task-item {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .created-task-item .task-key {
+            color: var(--accent-blue);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+        .created-task-item .task-key:hover {
+            text-decoration: underline;
+        }
+
+        .success-message {
+            background: rgba(56, 176, 0, 0.15);
+            border: 1px solid rgba(56, 176, 0, 0.3);
+            padding: 15px 20px;
+            border-radius: 10px;
+            color: var(--accent-green);
+            margin-bottom: 20px;
+        }
+
+        /* Autocomplete Styles */
+        .autocomplete-wrapper {
+            position: relative;
+        }
+
+        .autocomplete-input {
+            width: 100%;
+        }
+
+        .autocomplete-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            margin-top: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .autocomplete-dropdown.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+
+        .autocomplete-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .autocomplete-item .item-name {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .autocomplete-item .item-detail {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .autocomplete-item.selected {
+            background: rgba(67, 97, 238, 0.2);
+        }
+
+        /* Bulk Task Textarea */
+        .bulk-task-textarea {
+            min-height: 200px;
+            font-family: monospace;
+            line-height: 1.8;
+        }
+
+        .bulk-task-help {
+            background: rgba(67, 97, 238, 0.1);
+            border-left: 4px solid var(--accent-blue);
+            padding: 12px 16px;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .bulk-task-help code {
+            background: rgba(0,0,0,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .mode-toggle {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+        }
+
+        .mode-toggle button {
+            padding: 10px 20px;
+            border: 1px solid var(--border-color);
+            background: var(--input-bg);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .mode-toggle button:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .mode-toggle button:last-child {
+            border-radius: 0 8px 8px 0;
+            border-left: none;
+        }
+
+        .mode-toggle button.active {
+            background: var(--accent-blue);
+            color: #fff;
+            border-color: var(--accent-blue);
+        }
+
+        .single-task-form, .bulk-task-form {
+            display: none;
+        }
+
+        .single-task-form.active, .bulk-task-form.active {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .charts-row, .tables-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Jira Support Dashboard</h1>
+        <div class="header-controls">
+            <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+                <span class="icon" id="themeIcon">🌙</span>
+                <span id="themeText">Dark</span>
+            </button>
+            <select id="projectSelect">
+                <option value="">Proje seçin...</option>
+            </select>
+            <button class="refresh-btn" id="refreshBtn" onclick="loadReport()">
+                🔄 Yenile
+            </button>
+            <span class="generated-time" id="generatedTime"></span>
+        </div>
+    </div>
+    
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+        <button class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">📋 İş Yükü</button>
+        <button class="tab-btn" id="tabClosed" onclick="switchTab('closed')">✅ Günlük Kapanan</button>
+        <button class="tab-btn" id="tabSprint" onclick="switchTab('sprint')">🏃 Weekly Sprint</button>
+        <button class="tab-btn" id="tabUnsprinted" onclick="switchTab('unsprinted')">🚫 Sprinte Alınmayan</button>
+        <button class="tab-btn" id="tabOlkaDeploy" onclick="switchTab('olkaDeploy')">🚀 Olka Deploy</button>
+        <button class="tab-btn" id="tabRfr" onclick="switchTab('rfr')">🚦 RFR Takip</button>
+        <button class="tab-btn" id="tabProject" onclick="switchTab('project')">📊 Proje Raporu</button>
+        <button class="tab-btn" id="tabCreateTask" onclick="switchTab('createTask')">➕ Task Oluştur</button>
+    </div>
+    
+    <!-- Günlük İş Yükü Raporu Tab İçeriği -->
+    <div class="tab-content active" id="dailyTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>📋 Günlük İş Yükü Raporu</h2>
+                <div class="daily-report-controls">
+                    <button class="refresh-btn" onclick="loadDailyReport()">🔄 Yenile</button>
+                    <button class="refresh-btn screenshot-btn" onclick="captureReport('dailyReportContent', '📋 Günlük İş Yükü Raporu', 'is-yuku-raporu', this)">📸 Ekran Görüntüsü Al</button>
+                </div>
+            </div>
+            <p style="color: rgba(255,255,255,0.6); margin-bottom: 15px; font-size: 13px;">
+                Sprint: Aktif sprintteki açık tasklar | Support: Customer Support = Evet olan açık tasklar
+            </p>
+            <div id="dailyReportContent">
+                <div class="loading" style="height: 200px;">
+                    <span>Günlük rapor yükleniyor...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Günlük Kapanan Tab İçeriği -->
+    <div class="tab-content" id="closedTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>✅ Günlük Kapanan Task Raporu</h2>
+                <div class="daily-report-controls">
+                    <span class="filter-label">Tarih:</span>
+                    <input type="date" class="date-input" id="closedReportDate" onchange="loadClosedReport()">
+                    <button class="refresh-btn" onclick="loadClosedReport()">🔄 Yenile</button>
+                    <button class="refresh-btn screenshot-btn" onclick="captureReport('closedReportContent', '✅ Günlük Kapanan Task Raporu', 'gunluk-kapanan-rapor', this)">📸 Ekran Görüntüsü Al</button>
+                </div>
+            </div>
+            <p style="color: rgba(255,255,255,0.6); margin-bottom: 15px; font-size: 13px;">
+                Sprint: Customer Support = Hayır/Boş | Support: Customer Support = Evet
+            </p>
+            <div id="closedReportContent">
+                <div class="loading" style="height: 200px;">
+                    <span>Kapanan task raporu yükleniyor...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Weekly Sprint Tab İçeriği (Board 54 - Tüm Projeler) -->
+    <div class="tab-content" id="sprintTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>🏃 Weekly Sprint Taskları (Tüm Projeler)</h2>
+                <div class="daily-report-controls">
+                    <button class="refresh-btn" onclick="loadSprintReport()">🔄 Yenile</button>
+                    <button class="refresh-btn" onclick="sendSprintAlerts()" style="background: #f39c12;">📧 Uyarı Maili Gönder</button>
+                </div>
+            </div>
+            <div id="sprintInfoBar" style="display: flex; gap: 20px; margin-bottom: 15px; flex-wrap: wrap;">
+                <span style="color: rgba(255,255,255,0.6); font-size: 13px;">Sprint bilgileri yükleniyor...</span>
+            </div>
+            <div id="projectBreakdown" style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;"></div>
+            <div id="sprintReportContent">
+                <div class="loading" style="height: 200px;">
+                    <span>Sprint raporu yükleniyor...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sprinte Alınmayan Tab İçeriği -->
+    <div class="tab-content" id="unsprintedTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>🚫 Sprinte Alınmayan Tasklar</h2>
+                <div class="daily-report-controls">
+                    <button class="refresh-btn" onclick="loadUnsprintedSprints()">🔄 Sprintleri Yenile</button>
+                    <button class="refresh-btn" onclick="loadUnsprintedReport()" style="background: #4361ee;">🔍 Karşılaştır</button>
+                    <button class="refresh-btn" id="exportExcelBtn" onclick="exportUnsprintedExcel()" style="background: #1d6f42;">📥 Excel İndir</button>
+                </div>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
+                Olka <strong>(E-COMM DEVELOPMENT TEAM)</strong> sprintinde olup, seçilen Hebiar <strong>(weekly)</strong> sprintine <strong>alınmamış</strong> tasklar listelenir.
+                Eşleştirme, Olka taskındaki <code>CLLINK</code> alanına göre yapılır.
+            </p>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                <div style="flex: 1; min-width: 260px;">
+                    <label style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px;">🟦 Olka Sprint (E-COMM DEVELOPMENT TEAM)</label>
+                    <select class="form-select" id="olkaSprintSelect" style="width: 100%;">
+                        <option value="">Sprintler yükleniyor...</option>
+                    </select>
+                </div>
+                <div style="flex: 1; min-width: 260px;">
+                    <label style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px;">🟩 Hebiar Weekly Sprint</label>
+                    <select class="form-select" id="hebiarSprintSelect" style="width: 100%;">
+                        <option value="">Sprintler yükleniyor...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="unsprintedInfoBar" style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;"></div>
+            <div id="unsprintedReportContent">
+                <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    İki sprint seçip <strong>"Karşılaştır"</strong> butonuna tıklayın.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Olka Deploy Tab İçeriği -->
+    <div class="tab-content" id="olkaDeployTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>🚀 Olka Deploy</h2>
+                <div class="daily-report-controls">
+                    <span class="filter-label">CL Statü:</span>
+                    <select class="form-select" id="olkaDeployStatusFilter" onchange="renderOlkaDeployReport()" style="min-width: 180px;">
+                        <option value="">Tümü</option>
+                    </select>
+                    <button class="refresh-btn" onclick="loadOlkaDeployReport()">🔄 Yenile</button>
+                    <button class="refresh-btn" id="exportOlkaDeployBtn" onclick="exportOlkaDeployExcel()" style="background: #1d6f42;">📥 Excel İndir</button>
+                </div>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
+                Olka <strong>(E-COMM DEVELOPMENT TEAM)</strong> Jira'sında statüsü <strong>"Ready for Ship"</strong> olan tasklar listelenir.
+                Her task için <code>CLLINK</code> alanından bulunan CL (Hebiar) taskının atanan kişisi ve statüsü de gösterilir.
+                Excel'de son iki kolon (<strong>Deploy Çıkacak Kişi</strong>, <strong>Not</strong>) manuel doldurulmak üzere boş bırakılır.
+            </p>
+            <div id="olkaDeployInfoBar" style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;"></div>
+            <div id="olkaDeployReportContent">
+                <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    <strong>"Yenile"</strong> butonuna tıklayarak Ready for Ship tasklarını listeleyin.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RFR Takip Tab İçeriği -->
+    <div class="tab-content" id="rfrTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>🚦 RFR Takip</h2>
+                <div class="daily-report-controls">
+                    <button class="refresh-btn" onclick="loadRfrReport()">🔄 Yenile</button>
+                    <button class="refresh-btn" id="exportRfrBtn" onclick="exportRfrExcel()" style="background: #1d6f42;">📥 Excel İndir</button>
+                </div>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
+                Hebiar Jira'da statüsü <strong>"Ready For Release"</strong> olan tasklar <strong>kişi bazında</strong> listelenir.
+                Soldan bir kişi seçtiğinizde o kişinin RFR tasklarını, her taskın <strong>kaç gündür RFR'de</strong> beklediğini ve
+                <strong>son statü güncelleme tarihini</strong> görürsünüz. <strong>1 ayı (30 gün)</strong> geçen satırlar
+                <span style="color: var(--accent-red); font-weight: 600;">kırmızı</span> gösterilir.
+            </p>
+            <div id="rfrInfoBar" style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;"></div>
+            <div class="rfr-layout">
+                <div class="rfr-people" id="rfrPeopleList"></div>
+                <div class="rfr-main" id="rfrTableContent">
+                    <div class="rfr-empty">
+                        <strong>"Yenile"</strong> butonuna tıklayarak RFR tasklarını listeleyin.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Oluşturma Tab İçeriği -->
+    <div class="tab-content" id="createTaskTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>➕ Yeni Task Oluştur</h2>
+            </div>
+            
+            <!-- Mode Toggle -->
+            <div class="mode-toggle">
+                <button id="singleModeBtn" class="active" onclick="switchTaskMode('single')">📝 Tekli Task</button>
+                <button id="bulkModeBtn" onclick="switchTaskMode('bulk')">📋 Toplu Task</button>
+            </div>
+            
+            <div id="taskSuccessMessage" class="success-message" style="display: none;"></div>
+            
+            <!-- ========== Tekli Task Formu ========== -->
+            <div class="single-task-form active" id="singleTaskForm">
+                <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 13px;">
+                    Aşağıdaki formu doldurarak Jira'da yeni task oluşturabilirsiniz.
+                </p>
+                
+                <form class="task-form" onsubmit="createTask(event)">
+                    <div class="form-group">
+                        <label for="taskProject">Proje *</label>
+                        <select class="form-select" id="taskProject" required onchange="loadProjectUsers()">
+                            <option value="">Proje seçin...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskSummary">Konu Başlığı *</label>
+                        <input type="text" class="form-input" id="taskSummary" placeholder="Task başlığını girin..." required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskDescription">Açıklama</label>
+                        <textarea class="form-textarea" id="taskDescription" placeholder="Task açıklamasını girin (opsiyonel)..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskSprintSearch">Sprint</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" class="form-input autocomplete-input" id="taskSprintSearch" 
+                                   placeholder="Sprint adını yazmaya başlayın..." 
+                                   oninput="searchSprints(this.value)" 
+                                   onfocus="searchSprints(this.value)">
+                            <input type="hidden" id="taskSprintId">
+                            <div class="autocomplete-dropdown" id="sprintDropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskAssigneeSearch">Atanan Kişi</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" class="form-input autocomplete-input" id="taskAssigneeSearch" 
+                                   placeholder="Kişi adını yazmaya başlayın..." 
+                                   oninput="searchUsers(this.value)" 
+                                   onfocus="searchUsers(this.value)">
+                            <input type="hidden" id="taskAssigneeId">
+                            <div class="autocomplete-dropdown" id="assigneeDropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn" id="createTaskBtn">🚀 Task Oluştur</button>
+                </form>
+            </div>
+            
+            <!-- ========== Toplu Task Formu ========== -->
+            <div class="bulk-task-form" id="bulkTaskForm">
+                <div class="bulk-task-help">
+                    <strong>📘 Kullanım:</strong> Her satıra bir task yazın. Format: <code>Konu Başlığı | Kişi Adı</code><br>
+                    Örnek: <code>Oto scroll kalkacak | Burak Selçuk</code><br>
+                    Kişi belirtmezseniz task atanmamış olarak oluşturulur.
+                </div>
+                
+                <form class="task-form" onsubmit="createBulkTasks(event)">
+                    <div class="form-group">
+                        <label for="bulkProject">Proje *</label>
+                        <select class="form-select" id="bulkProject" required>
+                            <option value="">Proje seçin...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bulkSprintSearch">Sprint *</label>
+                        <div class="autocomplete-wrapper">
+                            <input type="text" class="form-input autocomplete-input" id="bulkSprintSearch" 
+                                   placeholder="Sprint adını yazmaya başlayın..." 
+                                   oninput="searchSprintsBulk(this.value)" 
+                                   onfocus="searchSprintsBulk(this.value)" required>
+                            <input type="hidden" id="bulkSprintId">
+                            <div class="autocomplete-dropdown" id="bulkSprintDropdown"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bulkTasks">Tasklar *</label>
+                        <textarea class="form-textarea bulk-task-textarea" id="bulkTasks" 
+                                  placeholder="Her satıra bir task yazın...
+Örnek:
+Oto scroll kalkacak | Burak Selçuk
+Buz istemiyorum kalkacak | Polat Özdemir
+Alerjen ikonu güncellenecek | Remzi Erarslan" required></textarea>
+                    </div>
+                    
+                    <button type="submit" class="submit-btn" id="createBulkTaskBtn">🚀 Tüm Taskları Oluştur</button>
+                </form>
+            </div>
+            
+            <div class="created-tasks-list" id="createdTasksList">
+                <h3 style="margin-bottom: 15px; color: var(--text-secondary);">📋 Bu Oturumda Oluşturulan Tasklar</h3>
+                <div id="createdTasksContainer">
+                    <p style="color: var(--text-muted); font-size: 13px;">Henüz task oluşturulmadı.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Proje Raporu Tab İçeriği -->
+    <div class="tab-content" id="projectTabContent">
+        <div class="filter-bar" id="filterBar">
+            <span class="filter-label">📅 Dönem:</span>
+            <select id="periodSelect" onchange="onPeriodChange()">
+                <option value="all">Tüm Zamanlar</option>
+                <option value="today">Bugün</option>
+                <option value="week">Bu Hafta</option>
+                <option value="month">Bu Ay</option>
+                <option value="custom">Özel Tarih Aralığı</option>
+            </select>
+            
+            <div class="custom-dates" id="customDates">
+                <span class="date-label">Başlangıç:</span>
+                <input type="date" class="date-input" id="startDate">
+                <span class="date-label">Bitiş:</span>
+                <input type="date" class="date-input" id="endDate">
+                <button class="refresh-btn" onclick="loadReport()">Uygula</button>
+            </div>
+            
+            <span class="filter-label" style="margin-left: 20px;">👤 Kişi:</span>
+            <select id="personSelect" onchange="loadReport()">
+                <option value="">Tüm Kişiler</option>
+            </select>
+            
+            <select id="personTypeSelect" onchange="loadReport()" style="display: none;">
+                <option value="all">Reporter & Assignee</option>
+                <option value="reporter">Sadece Reporter</option>
+                <option value="assignee">Sadece Assignee</option>
+            </select>
+        </div>
+        
+        <div class="container" id="mainContainer">
+            <div class="loading" id="initialLoading">
+                <span>👆 Yukarıdan bir proje seçin</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentReport = null;
+        let charts = {};
+        
+        // Theme Management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('dashboard-theme') || 'dark';
+            setTheme(savedTheme);
+        }
+
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            setTheme(newTheme);
+            localStorage.setItem('dashboard-theme', newTheme);
+            
+            // Update charts if they exist
+            if (Object.keys(charts).length > 0) {
+                updateChartTheme();
+            }
+        }
+
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            const icon = document.getElementById('themeIcon');
+            const text = document.getElementById('themeText');
+            
+            if (theme === 'dark') {
+                icon.textContent = '🌙';
+                text.textContent = 'Dark';
+            } else {
+                icon.textContent = '☀️';
+                text.textContent = 'Light';
+            }
+        }
+
+        function getChartColors() {
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            return {
+                textColor: isDark ? '#fff' : '#1a1a2e',
+                gridColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                tickColor: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'
+            };
+        }
+
+        function updateChartTheme() {
+            const colors = getChartColors();
+            
+            Object.values(charts).forEach(chart => {
+                if (chart.options.plugins && chart.options.plugins.legend) {
+                    chart.options.plugins.legend.labels.color = colors.textColor;
+                }
+                if (chart.options.scales) {
+                    if (chart.options.scales.x) {
+                        chart.options.scales.x.ticks.color = colors.tickColor;
+                        chart.options.scales.x.grid.color = colors.gridColor;
+                    }
+                    if (chart.options.scales.y) {
+                        chart.options.scales.y.ticks.color = colors.tickColor;
+                        chart.options.scales.y.grid.color = colors.gridColor;
+                    }
+                }
+                chart.update();
+            });
+        }
+
+        // Initialize theme on page load
+        initTheme();
+        
+        // Tab değiştirme fonksiyonu
+        function switchTab(tab) {
+            // Tab butonlarını güncelle
+            document.getElementById('tabDaily').classList.toggle('active', tab === 'daily');
+            document.getElementById('tabClosed').classList.toggle('active', tab === 'closed');
+            document.getElementById('tabSprint').classList.toggle('active', tab === 'sprint');
+            document.getElementById('tabUnsprinted').classList.toggle('active', tab === 'unsprinted');
+            document.getElementById('tabOlkaDeploy').classList.toggle('active', tab === 'olkaDeploy');
+            document.getElementById('tabRfr').classList.toggle('active', tab === 'rfr');
+            document.getElementById('tabProject').classList.toggle('active', tab === 'project');
+            document.getElementById('tabCreateTask').classList.toggle('active', tab === 'createTask');
+            
+            // Tab içeriklerini güncelle
+            document.getElementById('dailyTabContent').classList.toggle('active', tab === 'daily');
+            document.getElementById('closedTabContent').classList.toggle('active', tab === 'closed');
+            document.getElementById('sprintTabContent').classList.toggle('active', tab === 'sprint');
+            document.getElementById('unsprintedTabContent').classList.toggle('active', tab === 'unsprinted');
+            document.getElementById('olkaDeployTabContent').classList.toggle('active', tab === 'olkaDeploy');
+            document.getElementById('rfrTabContent').classList.toggle('active', tab === 'rfr');
+            document.getElementById('projectTabContent').classList.toggle('active', tab === 'project');
+            document.getElementById('createTaskTabContent').classList.toggle('active', tab === 'createTask');
+            
+            // Günlük kapanan tab'ına geçişte raporu yükle
+            if (tab === 'closed') {
+                loadClosedReport();
+            }
+            // Sprint tab'ına geçişte raporu yükle
+            if (tab === 'sprint') {
+                loadSprintReport();
+            }
+            // Sprinte alınmayan tab'ına geçişte sprint listelerini yükle (bir kez)
+            if (tab === 'unsprinted' && !unsprintedSprintsLoaded) {
+                unsprintedSprintsLoaded = true;
+                loadUnsprintedSprints();
+            }
+            // Olka Deploy tab'ına geçişte raporu yükle (bir kez)
+            if (tab === 'olkaDeploy' && !olkaDeployLoaded) {
+                olkaDeployLoaded = true;
+                loadOlkaDeployReport();
+            }
+            // RFR Takip tab'ına geçişte raporu yükle (bir kez)
+            if (tab === 'rfr' && !rfrLoaded) {
+                rfrLoaded = true;
+                loadRfrReport();
+            }
+            // Task oluşturma tab'ına geçişte form verilerini yükle
+            if (tab === 'createTask') {
+                loadTaskFormData();
+            }
+        }
+        
+        // Sayfa yüklendiğinde projeleri çek ve günlük raporu yükle
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Günlük kapanan raporu için tarih ayarla
+            document.getElementById('closedReportDate').value = new Date().toISOString().split('T')[0];
+            
+            // Günlük raporu yükle
+            await loadDailyReport();
+            
+            // Projeleri yükle
+            await loadProjects();
+        });
+        
+        // Rapor ekran görüntüsü alma (yüksek çözünürlüklü - WhatsApp paylaşımı için)
+        async function captureReport(contentId, title, fileNamePrefix, btn) {
+            const source = document.getElementById(contentId);
+            if (!source) return;
+
+            // Rapor henüz yüklenmemişse uyar
+            if (source.querySelector('.loading') || !source.querySelector('.daily-table, .daily-summary-cards')) {
+                alert('Önce raporun yüklenmesini bekleyin.');
+                return;
+            }
+
+            if (typeof html2canvas === 'undefined') {
+                alert('Ekran görüntüsü aracı henüz yüklenmedi. Birkaç saniye sonra tekrar deneyin.');
+                return;
+            }
+
+            const originalBtnText = btn ? btn.textContent : null;
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Hazırlanıyor...';
+            }
+
+            const now = new Date();
+            const dateLabel = now.toLocaleString('tr-TR', {
+                year: 'numeric', month: 'long', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+
+            // Yüksek okunabilirlik için açık temalı, geniş fontlu geçici bir kart oluştur.
+            // CSS değişkenleri kalıtımla klonlanan içeriğe uygulanır.
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = [
+                'position: fixed',
+                'left: -99999px',
+                'top: 0',
+                'width: 820px',
+                'padding: 36px',
+                'background: #ffffff',
+                'box-sizing: border-box',
+                'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                'font-size: 17px',
+                'color: #14172b',
+                '--text-primary: #14172b',
+                '--text-secondary: rgba(0,0,0,0.65)',
+                '--text-muted: rgba(0,0,0,0.45)',
+                '--border-color: rgba(0,0,0,0.14)',
+                '--bg-tertiary: #ffffff',
+                '--bg-secondary: #ffffff',
+                '--card-bg: #f2f5fb',
+                '--table-header-bg: #dfe6fb',
+                '--table-row-hover: transparent',
+                '--accent-blue: #2f47c7',
+                '--accent-pink: #d61a67',
+                '--accent-cyan: #0090b3',
+                '--accent-orange: #d96f00',
+                '--accent-green: #2d9600'
+            ].join(';');
+
+            // Başlık + zaman damgası
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; padding-bottom:18px; border-bottom:3px solid #2f47c7;';
+            header.innerHTML =
+                '<div style="font-size:26px; font-weight:800; color:#14172b;">' + title + '</div>' +
+                '<div style="font-size:15px; font-weight:600; color:#2f47c7; background:#e3e9fb; padding:9px 15px; border-radius:10px; white-space:nowrap;">' + dateLabel + '</div>';
+            wrapper.appendChild(header);
+
+            // Rapor içeriğini klonla (butonlar dahil edilmez, sadece kartlar + tablo)
+            const clone = source.cloneNode(true);
+            clone.querySelectorAll('.loading').forEach(el => el.remove());
+            wrapper.appendChild(clone);
+
+            document.body.appendChild(wrapper);
+
+            try {
+                const canvas = await html2canvas(wrapper, {
+                    scale: 3,               // yüksek çözünürlük = keskin, okunabilir yazı
+                    backgroundColor: '#ffffff',
+                    useCORS: true,
+                    logging: false
+                });
+
+                const pad = n => String(n).padStart(2, '0');
+                const dateFile = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+
+                canvas.toBlob(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.download = fileNamePrefix + '-' + dateFile + '.jpg';
+                    link.href = url;
+                    link.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }, 'image/jpeg', 0.95);
+            } catch (err) {
+                alert('Ekran görüntüsü alınamadı: ' + err.message);
+            } finally {
+                wrapper.remove();
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originalBtnText;
+                }
+            }
+        }
+
+        // Günlük iş yükü raporu yükleme fonksiyonu
+        async function loadDailyReport() {
+            const container = document.getElementById('dailyReportContent');
+            
+            container.innerHTML = `
+                <div class="loading" style="height: 150px;">
+                    <div class="loading-spinner"></div>
+                    <span>İş yükü raporu yükleniyor...</span>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('/api/daily-report');
+                
+                if (!response.ok) {
+                    throw new Error('İş yükü raporu alınamadı');
+                }
+                
+                const data = await response.json();
+                renderDailyReport(data);
+                
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="error-message" style="text-align: center; padding: 30px;">
+                        ❌ Hata: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderExcludedStatusCards(breakdown) {
+            if (!breakdown || breakdown.length === 0) return '';
+            return `
+                <div class="excluded-status-cards">
+                    ${breakdown.map(item => `
+                        <div class="excluded-status-card">
+                            <div class="value">${item.count}</div>
+                            <div class="label">${item.status}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        function renderDailyReport(data) {
+            const container = document.getElementById('dailyReportContent');
+            const now = new Date().toLocaleString('tr-TR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            const rows = data.rows || [];
+            const totals = data.totals || { sprint: 0, support: 0, total: 0 };
+            
+            if (rows.length === 0) {
+                container.innerHTML = `
+                    <div class="daily-summary-cards">
+                        <div class="daily-summary-card sprint">
+                            <div class="value">0</div>
+                            <div class="label">Sprint</div>
+                        </div>
+                        <div class="daily-summary-card support">
+                            <div class="value">0</div>
+                            <div class="label">Support</div>
+                        </div>
+                        <div class="daily-summary-card total">
+                            <div class="value">0</div>
+                            <div class="label">Toplam</div>
+                        </div>
+                    </div>
+                    ${renderExcludedStatusCards(data.excludedStatusBreakdown)}
+                    <div style="text-align: center; padding: 30px; color: rgba(255,255,255,0.6);">
+                        <span class="period-badge">${now}</span><br><br>
+                        Açık task bulunamadı.
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="daily-summary-cards">
+                    <div class="daily-summary-card sprint">
+                        <div class="value">${totals.sprint}</div>
+                        <div class="label">Sprint</div>
+                    </div>
+                    <div class="daily-summary-card support">
+                        <div class="value">${totals.support}</div>
+                        <div class="label">Support</div>
+                    </div>
+                    <div class="daily-summary-card total">
+                        <div class="value">${totals.total}</div>
+                        <div class="label">Toplam</div>
+                    </div>
+                    <span class="period-badge" style="margin-left: auto; align-self: center;">Güncelleme: ${now}</span>
+                </div>
+                ${renderExcludedStatusCards(data.excludedStatusBreakdown)}
+                
+                <table class="daily-table">
+                    <thead>
+                        <tr>
+                            <th>Kişi</th>
+                            <th>Sprint</th>
+                            <th>Support</th>
+                            <th>Toplam</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(person => `
+                            <tr>
+                                <td>${person.personName}</td>
+                                <td>${person.sprint}</td>
+                                <td>${person.support}</td>
+                                <td><strong>${person.total}</strong></td>
+                            </tr>
+                        `).join('')}
+                        <tr class="subtotal-row">
+                            <td><strong>Alt Toplam</strong></td>
+                            <td><strong>${totals.sprint}</strong></td>
+                            <td><strong>${totals.support}</strong></td>
+                            <td><strong>${totals.total}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        // Weekly Sprint raporu yükleme (Board 54 - Tüm Projeler)
+        async function loadSprintReport() {
+            const container = document.getElementById('sprintReportContent');
+            const infoBar = document.getElementById('sprintInfoBar');
+            const projectBreakdown = document.getElementById('projectBreakdown');
+            
+            container.innerHTML = `
+                <div class="loading" style="height: 150px;">
+                    <div class="loading-spinner"></div>
+                    <span>Sprint raporu yükleniyor...</span>
+                </div>
+            `;
+            projectBreakdown.innerHTML = '';
+            
+            try {
+                const response = await fetch(`/api/sprint-report/ALL`);
+                
+                if (!response.ok) {
+                    throw new Error('Sprint raporu alınamadı');
+                }
+                
+                const data = await response.json();
+                renderSprintReport(data);
+                
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="error-message" style="text-align: center; padding: 30px;">
+                        ❌ Hata: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderSprintReport(data) {
+            const container = document.getElementById('sprintReportContent');
+            const infoBar = document.getElementById('sprintInfoBar');
+            const projectBreakdown = document.getElementById('projectBreakdown');
+            
+            // Sprint bilgileri
+            const sprint = data.sprint || {};
+            const endDate = sprint.endDate ? new Date(sprint.endDate) : null;
+            const today = new Date();
+            const daysLeft = endDate ? Math.ceil((endDate - today) / (1000 * 60 * 60 * 24)) : 'N/A';
+            
+            infoBar.innerHTML = `
+                <span style="background: rgba(67, 97, 238, 0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">
+                    🏃 Sprint: <strong>${sprint.name || 'Bilinmiyor'}</strong>
+                </span>
+                <span style="background: rgba(76, 175, 80, 0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">
+                    📅 Bitiş: <strong>${endDate ? endDate.toLocaleDateString('tr-TR') : 'Bilinmiyor'}</strong>
+                </span>
+                <span style="background: ${daysLeft <= 2 ? 'rgba(231, 76, 60, 0.5)' : 'rgba(255, 193, 7, 0.3)'}; padding: 5px 12px; border-radius: 6px; font-size: 13px;">
+                    ⏳ Kalan: <strong>${daysLeft} gün</strong>
+                </span>
+                <span style="background: rgba(255, 255, 255, 0.1); padding: 5px 12px; border-radius: 6px; font-size: 13px;">
+                    📊 Toplam Açık Task: <strong>${data.totalTasks || 0}</strong>
+                </span>
+            `;
+            
+            // Proje breakdown göster
+            const breakdown = data.projectBreakdown || {};
+            const colors = { 'CS': '#4fc3f7', 'CL': '#81c784', 'CLX': '#ffb74d', 'MC': '#f06292', 'CLSJ': '#ba68c8' };
+            projectBreakdown.innerHTML = Object.entries(breakdown).map(([proj, count]) => `
+                <span style="background: ${colors[proj] || '#9e9e9e'}33; color: ${colors[proj] || '#9e9e9e'}; padding: 5px 12px; border-radius: 6px; font-size: 13px;">
+                    📁 ${proj}: <strong>${count}</strong>
+                </span>
+            `).join('');
+            
+            const rows = data.rows || [];
+            
+            if (rows.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: rgba(255,255,255,0.6);">
+                        Aktif sprintte açık task bulunamadı.
+                    </div>
+                `;
+                return;
+            }
+            
+            // Tablo oluştur
+            let tableHTML = `
+                <table class="daily-report-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Kişi</th>
+                            <th style="text-align: center;">Task Sayısı</th>
+                            <th style="text-align: left;">Tasklar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            const taskColors = { 'CS': '#4fc3f7', 'CL': '#81c784', 'CLX': '#ffb74d', 'MC': '#f06292', 'CLSJ': '#ba68c8' };
+            
+            rows.forEach(row => {
+                const taskLinks = row.tasks.map(t => {
+                    const color = taskColors[t.project] || '#9e9e9e';
+                    return `<a href="https://hebiar.atlassian.net/browse/${t.key}" target="_blank" style="color: ${color}; text-decoration: none; margin-right: 8px;" title="${t.project}: ${t.summary}">${t.key}</a>`;
+                }).join('');
+                
+                tableHTML += `
+                    <tr>
+                        <td style="font-weight: 500;">${row.personName}</td>
+                        <td style="text-align: center;">
+                            <span style="background: ${row.taskCount > 5 ? 'rgba(231,76,60,0.3)' : 'rgba(76,175,80,0.3)'}; padding: 2px 10px; border-radius: 10px;">
+                                ${row.taskCount}
+                            </span>
+                        </td>
+                        <td style="font-size: 12px;">${taskLinks}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+        
+        // Sprint uyarı maili gönderme
+        async function sendSprintAlerts() {
+            if (!confirm('Tüm projeler için sprint uyarı maili göndermek istiyor musunuz?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/sprint-alerts/ALL`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Mail gönderilemedi');
+                }
+                
+                if (!result.smtpConfigured) {
+                    // SMTP yoksa alert içeriklerini göster
+                    showAlertContents(result);
+                } else {
+                    // SMTP varsa gönderim sonucunu göster
+                    let msg = `✅ ${result.message}\n\nGönderilen: ${result.sentCount} / ${result.totalAlerts} kişi`;
+                    if (result.errors && result.errors.length > 0) {
+                        msg += `\n\nHatalar:\n${result.errors.join('\n')}`;
+                    }
+                    alert(msg);
+                }
+                
+            } catch (error) {
+                alert(`❌ Hata: ${error.message}`);
+            }
+        }
+        
+        // Alert içeriklerini modal'da göster
+        function showAlertContents(result) {
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;overflow:auto;padding:20px;';
+            
+            let content = `
+                <div style="max-width:900px;margin:0 auto;background:#1e1e2e;border-radius:12px;padding:25px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                        <h2 style="margin:0;">⚠️ SMTP Yapılandırması Eksik</h2>
+                        <button onclick="this.closest('div').parentElement.remove()" style="background:#e74c3c;border:none;color:white;padding:8px 16px;border-radius:6px;cursor:pointer;">Kapat</button>
+                    </div>
+                    <p style="color:#f39c12;margin-bottom:20px;">Mail gönderilemedi. Aşağıdaki içerikleri manuel olarak gönderebilirsiniz.</p>
+                    <p style="color:#888;margin-bottom:10px;">Sprint: <strong>${result.sprintName}</strong> | Kalan: <strong>${result.daysUntilEnd} gün</strong> | Toplam: <strong>${result.totalAlerts} kişi</strong></p>
+            `;
+            
+            result.alerts.forEach((alert, i) => {
+                content += `
+                    <div style="background:rgba(255,255,255,0.05);border-radius:8px;padding:15px;margin-bottom:15px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                            <strong style="color:#4fc3f7;">${i+1}. ${alert.personName}</strong>
+                            <span style="color:#888;">${alert.email}</span>
+                        </div>
+                        <div style="margin-bottom:8px;">
+                            <span style="color:#888;">Konu:</span> <span style="color:#81c784;">${alert.subject}</span>
+                        </div>
+                        <textarea readonly style="width:100%;height:150px;background:#0d0d15;border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:white;padding:10px;font-size:12px;resize:vertical;">${alert.body}</textarea>
+                        <button onclick="navigator.clipboard.writeText(this.previousElementSibling.value);this.textContent='Kopyalandı!';setTimeout(()=>this.textContent='📋 Kopyala',1500)" style="margin-top:8px;background:#4361ee;border:none;color:white;padding:6px 12px;border-radius:4px;cursor:pointer;">📋 Kopyala</button>
+                    </div>
+                `;
+            });
+            
+            content += '</div>';
+            modal.innerHTML = content;
+            document.body.appendChild(modal);
+        }
+        
+        // ========== Sprinte Alınmayan (Olka vs Hebiar) ==========
+        let unsprintedSprintsLoaded = false;
+        let lastUnsprintedData = null;
+        
+        // Mevcut sonucu şablonlu Excel (.xlsx) olarak indir
+        async function exportUnsprintedExcel() {
+            if (!lastUnsprintedData || !lastUnsprintedData.rows || lastUnsprintedData.rows.length === 0) {
+                alert('Önce iki sprint seçip "Karşılaştır" ile bir sonuç oluşturun.');
+                return;
+            }
+            
+            const clean = (t) => (t || '').replace(/\(aktif\)/g, '').trim();
+            const olkaSprintName = clean(document.getElementById('olkaSprintSelect').selectedOptions[0]?.text);
+            const hebiarSprintName = clean(document.getElementById('hebiarSprintSelect').selectedOptions[0]?.text);
+            
+            const btn = document.getElementById('exportExcelBtn');
+            const oldText = btn ? btn.textContent : null;
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...'; }
+            
+            try {
+                const res = await fetch('/api/unsprinted/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rows: lastUnsprintedData.rows,
+                        olkaSprintName,
+                        hebiarSprintName,
+                        olkaTotal: lastUnsprintedData.olkaTotal,
+                        hebiarTotal: lastUnsprintedData.hebiarTotal
+                    })
+                });
+                
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'Excel oluşturulamadı');
+                }
+                
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const sanitize = (t) => (t || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+                const stamp = new Date().toISOString().slice(0, 10);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sprinte-alinmayan_${sanitize(olkaSprintName) || 'olka'}_vs_${sanitize(hebiarSprintName) || 'hebiar'}_${stamp}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (error) {
+                alert('❌ Excel indirilemedi: ' + error.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = oldText; }
+            }
+        }
+        
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+        
+        // Her iki taraftaki sprint listelerini yükle
+        async function loadUnsprintedSprints() {
+            const olkaSelect = document.getElementById('olkaSprintSelect');
+            const hebiarSelect = document.getElementById('hebiarSprintSelect');
+            
+            olkaSelect.innerHTML = '<option value="">Sprintler yükleniyor...</option>';
+            hebiarSelect.innerHTML = '<option value="">Sprintler yükleniyor...</option>';
+            
+            // Olka sprintleri
+            try {
+                const res = await fetch('/api/unsprinted/olka-sprints');
+                if (!res.ok) throw new Error((await res.json()).error || 'Olka sprintleri alınamadı');
+                const sprints = await res.json();
+                olkaSelect.innerHTML = '<option value="">Sprint seçin...</option>' + sprints.map(s =>
+                    `<option value="${s.id}"${s.state === 'active' ? ' selected' : ''}>${escapeHtml(s.name)}${s.state === 'active' ? ' (aktif)' : ''}</option>`
+                ).join('');
+            } catch (error) {
+                olkaSelect.innerHTML = `<option value="">Hata: ${escapeHtml(error.message)}</option>`;
+            }
+            
+            // Hebiar sprintleri
+            try {
+                const res = await fetch('/api/unsprinted/hebiar-sprints');
+                if (!res.ok) throw new Error((await res.json()).error || 'Hebiar sprintleri alınamadı');
+                const sprints = await res.json();
+                hebiarSelect.innerHTML = '<option value="">Sprint seçin...</option>' + sprints.map(s =>
+                    `<option value="${s.id}"${s.state === 'active' ? ' selected' : ''}>${escapeHtml(s.name)}${s.state === 'active' ? ' (aktif)' : ''}</option>`
+                ).join('');
+            } catch (error) {
+                hebiarSelect.innerHTML = `<option value="">Hata: ${escapeHtml(error.message)}</option>`;
+            }
+        }
+        
+        // Karşılaştırma raporunu yükle
+        async function loadUnsprintedReport() {
+            const olkaSprintId = document.getElementById('olkaSprintSelect').value;
+            const hebiarSprintId = document.getElementById('hebiarSprintSelect').value;
+            const container = document.getElementById('unsprintedReportContent');
+            const infoBar = document.getElementById('unsprintedInfoBar');
+            
+            if (!olkaSprintId || !hebiarSprintId) {
+                alert('Lütfen hem Olka hem de Hebiar sprintini seçin.');
+                return;
+            }
+            
+            infoBar.innerHTML = '';
+            container.innerHTML = `
+                <div class="loading" style="height: 150px;">
+                    <div class="loading-spinner"></div>
+                    <span>Tasklar karşılaştırılıyor...</span>
+                </div>
+            `;
+            
+            try {
+                const res = await fetch(`/api/unsprinted/report?olkaSprintId=${encodeURIComponent(olkaSprintId)}&hebiarSprintId=${encodeURIComponent(hebiarSprintId)}`);
+                if (!res.ok) throw new Error((await res.json()).error || 'Rapor alınamadı');
+                const data = await res.json();
+                renderUnsprintedReport(data);
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="error-message" style="text-align: center; padding: 30px;">
+                        ❌ Hata: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderUnsprintedReport(data) {
+            lastUnsprintedData = data;
+            const container = document.getElementById('unsprintedReportContent');
+            const infoBar = document.getElementById('unsprintedInfoBar');
+            
+            infoBar.innerHTML = `
+                <span style="background: rgba(67,97,238,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">🟦 Olka Task: <strong>${data.olkaTotal}</strong></span>
+                <span style="background: rgba(76,175,80,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">🟩 Hebiar Sprint Task: <strong>${data.hebiarTotal}</strong></span>
+                <span style="background: rgba(231,76,60,0.35); padding: 5px 12px; border-radius: 6px; font-size: 13px;">🚫 Sprinte Alınmayan: <strong>${data.count}</strong></span>
+                ${!data.cllinkFieldFound ? `<span style="background: rgba(243,156,18,0.35); padding: 5px 12px; border-radius: 6px; font-size: 13px;">⚠️ CLLINK alanı bulunamadı</span>` : ''}
+            `;
+            
+            const rows = data.rows || [];
+            
+            if (rows.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                        🎉 Seçilen Olka sprintindeki tüm tasklar Hebiar sprintine alınmış.
+                    </div>
+                `;
+                return;
+            }
+            
+            let tableHTML = `
+                <table class="daily-report-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Olka Task No</th>
+                            <th style="text-align: left;">CL Task No</th>
+                            <th style="text-align: left;">Task Adı</th>
+                            <th style="text-align: left;">Atanan Kişi</th>
+                            <th style="text-align: left;">Reporter</th>
+                            <th style="text-align: left;">Statüsü</th>
+                            <th style="text-align: left;">Öncelik Seviyesi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            rows.forEach(r => {
+                const olkaLink = `<a href="https://olkaproduct.atlassian.net/browse/${encodeURIComponent(r.olkaKey)}" target="_blank" style="color: #4fc3f7; text-decoration: none; font-weight: 500;">${escapeHtml(r.olkaKey)}</a>`;
+                const clLink = r.clKey
+                    ? `<a href="https://hebiar.atlassian.net/browse/${encodeURIComponent(r.clKey)}" target="_blank" style="color: #81c784; text-decoration: none;">${escapeHtml(r.clKey)}</a>`
+                    : `<span style="color: var(--text-muted);">—</span>`;
+                
+                tableHTML += `
+                    <tr>
+                        <td>${olkaLink}</td>
+                        <td>${clLink}</td>
+                        <td style="font-size: 13px;">${escapeHtml(r.summary)}</td>
+                        <td>${r.assignee ? escapeHtml(r.assignee) : '<span style="color: var(--text-muted);">Atanmamış</span>'}</td>
+                        <td>${r.reporter ? escapeHtml(r.reporter) : '—'}</td>
+                        <td>${r.status ? `<span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 8px; font-size: 12px;">${escapeHtml(r.status)}</span>` : '—'}</td>
+                        <td>${r.priority ? escapeHtml(r.priority) : '—'}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+        
+        // ========== Olka Deploy (Ready for Ship) ==========
+        let olkaDeployLoaded = false;
+        let lastOlkaDeployData = null;
+        
+        // Ready for Ship tasklarını yükle
+        async function loadOlkaDeployReport() {
+            const container = document.getElementById('olkaDeployReportContent');
+            const infoBar = document.getElementById('olkaDeployInfoBar');
+            
+            infoBar.innerHTML = '';
+            container.innerHTML = `
+                <div class="loading" style="height: 150px;">
+                    <div class="loading-spinner"></div>
+                    <span>Ready for Ship tasklar yükleniyor...</span>
+                </div>
+            `;
+            
+            try {
+                const res = await fetch('/api/olka-deploy/report');
+                if (!res.ok) throw new Error((await res.json()).error || 'Rapor alınamadı');
+                const data = await res.json();
+                lastOlkaDeployData = data;
+                
+                // CL statü filtre seçeneklerini doldur
+                const filter = document.getElementById('olkaDeployStatusFilter');
+                const current = filter.value;
+                filter.innerHTML = '<option value="">Tümü</option>' +
+                    (data.clStatuses || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('') +
+                    '<option value="__none__">— (CL statü yok)</option>';
+                filter.value = current;
+                
+                renderOlkaDeployReport();
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="error-message" style="text-align: center; padding: 30px;">
+                        ❌ Hata: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+        
+        // Seçilen CL statü filtresine göre görünen satırları döndürür
+        function getFilteredOlkaDeployRows() {
+            if (!lastOlkaDeployData || !lastOlkaDeployData.rows) return [];
+            const filterVal = document.getElementById('olkaDeployStatusFilter').value;
+            if (!filterVal) return lastOlkaDeployData.rows;
+            if (filterVal === '__none__') return lastOlkaDeployData.rows.filter(r => !r.clStatus);
+            return lastOlkaDeployData.rows.filter(r => r.clStatus === filterVal);
+        }
+        
+        function renderOlkaDeployReport() {
+            const data = lastOlkaDeployData;
+            const container = document.getElementById('olkaDeployReportContent');
+            const infoBar = document.getElementById('olkaDeployInfoBar');
+            if (!data) return;
+            
+            const rows = getFilteredOlkaDeployRows();
+            
+            infoBar.innerHTML = `
+                <span style="background: rgba(67,97,238,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">🚀 Ready for Ship: <strong>${data.count}</strong></span>
+                <span style="background: rgba(76,175,80,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">🔎 Görüntülenen: <strong>${rows.length}</strong></span>
+                ${!data.cllinkFieldFound ? `<span style="background: rgba(243,156,18,0.35); padding: 5px 12px; border-radius: 6px; font-size: 13px;">⚠️ CLLINK alanı bulunamadı</span>` : ''}
+            `;
+            
+            if (rows.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: var(--text-secondary);">
+                        Seçilen filtreye uygun task bulunamadı.
+                    </div>
+                `;
+                return;
+            }
+            
+            let tableHTML = `
+                <table class="daily-report-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Olka Task No</th>
+                            <th style="text-align: left;">Task Adı</th>
+                            <th style="text-align: left;">Atanan Kişi</th>
+                            <th style="text-align: left;">Reporter</th>
+                            <th style="text-align: left;">Cl Task No</th>
+                            <th style="text-align: left;">Cl Atanan Kişi</th>
+                            <th style="text-align: left;">Cl Statü</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            rows.forEach(r => {
+                const olkaLink = `<a href="https://olkaproduct.atlassian.net/browse/${encodeURIComponent(r.olkaKey)}" target="_blank" style="color: #4fc3f7; text-decoration: none; font-weight: 500;">${escapeHtml(r.olkaKey)}</a>`;
+                const clLink = r.clKey
+                    ? `<a href="https://hebiar.atlassian.net/browse/${encodeURIComponent(r.clKey)}" target="_blank" style="color: #81c784; text-decoration: none;">${escapeHtml(r.clKey)}</a>`
+                    : `<span style="color: var(--text-muted);">—</span>`;
+                
+                tableHTML += `
+                    <tr>
+                        <td>${olkaLink}</td>
+                        <td style="font-size: 13px;">${escapeHtml(r.summary)}</td>
+                        <td>${r.assignee ? escapeHtml(r.assignee) : '<span style="color: var(--text-muted);">Atanmamış</span>'}</td>
+                        <td>${r.reporter ? escapeHtml(r.reporter) : '—'}</td>
+                        <td>${clLink}</td>
+                        <td>${r.clAssignee ? escapeHtml(r.clAssignee) : '<span style="color: var(--text-muted);">—</span>'}</td>
+                        <td>${r.clStatus ? `<span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 8px; font-size: 12px;">${escapeHtml(r.clStatus)}</span>` : '<span style="color: var(--text-muted);">—</span>'}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = tableHTML;
+        }
+        
+        // Mevcut (filtrelenmiş) sonucu şablonlu Excel (.xlsx) olarak indir
+        async function exportOlkaDeployExcel() {
+            if (!lastOlkaDeployData || !lastOlkaDeployData.rows || lastOlkaDeployData.rows.length === 0) {
+                alert('Önce "Yenile" ile Ready for Ship tasklarını listeleyin.');
+                return;
+            }
+            
+            const rows = getFilteredOlkaDeployRows();
+            const btn = document.getElementById('exportOlkaDeployBtn');
+            const oldText = btn ? btn.textContent : null;
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...'; }
+            
+            try {
+                const res = await fetch('/api/olka-deploy/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rows,
+                        status: lastOlkaDeployData.status
+                    })
+                });
+                
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'Excel oluşturulamadı');
+                }
+                
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const stamp = new Date().toISOString().slice(0, 10);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `olka-deploy_ready-for-ship_${stamp}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (error) {
+                alert('❌ Excel indirilemedi: ' + error.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = oldText; }
+            }
+        }
+        
+        // ========== RFR Takip (Ready For Release) ==========
+        let rfrLoaded = false;
+        let lastRfrData = null;
+        let selectedRfrPerson = null; // null = henüz seçim yok, '__all__' = tümü, aksi halde kişi adı
+        
+        // RFR tasklarını yükle
+        async function loadRfrReport() {
+            const peopleEl = document.getElementById('rfrPeopleList');
+            const tableEl = document.getElementById('rfrTableContent');
+            const infoBar = document.getElementById('rfrInfoBar');
+            
+            infoBar.innerHTML = '';
+            peopleEl.innerHTML = '';
+            tableEl.innerHTML = `
+                <div class="loading" style="height: 150px;">
+                    <div class="loading-spinner"></div>
+                    <span>RFR tasklar yükleniyor...</span>
+                </div>
+            `;
+            
+            try {
+                const res = await fetch('/api/rfr/report');
+                if (!res.ok) throw new Error((await res.json()).error || 'Rapor alınamadı');
+                const data = await res.json();
+                lastRfrData = data;
+                selectedRfrPerson = null;
+                
+                renderRfrInfo();
+                renderRfrPeople();
+                renderRfrTable();
+            } catch (error) {
+                infoBar.innerHTML = '';
+                peopleEl.innerHTML = '';
+                tableEl.innerHTML = `
+                    <div class="error-message" style="text-align: center; padding: 30px;">
+                        ❌ Hata: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderRfrInfo() {
+            const data = lastRfrData;
+            const infoBar = document.getElementById('rfrInfoBar');
+            if (!data) { infoBar.innerHTML = ''; return; }
+            infoBar.innerHTML = `
+                <span style="background: rgba(67,97,238,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">🚦 Toplam RFR: <strong>${data.count}</strong></span>
+                <span style="background: rgba(76,175,80,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">👥 Kişi: <strong>${data.peopleCount || (data.people ? data.people.length : 0)}</strong></span>
+                <span style="background: rgba(230,57,70,0.3); padding: 5px 12px; border-radius: 6px; font-size: 13px;">⏰ ${data.overdueDays} günü geçen: <strong>${data.overdueCount}</strong></span>
+            `;
+        }
+        
+        // Kişi listesini (sol panel) çiz
+        function renderRfrPeople() {
+            const data = lastRfrData;
+            const peopleEl = document.getElementById('rfrPeopleList');
+            if (!data || !data.people) { peopleEl.innerHTML = ''; return; }
+            
+            let html = '<div class="rfr-people-title">Kişiler</div>';
+            
+            // "Tümü" seçeneği (tüm kişilerin tasklarını gösterir)
+            html += `
+                <div class="rfr-person ${selectedRfrPerson === '__all__' ? 'active' : ''}" onclick="selectRfrPerson('__all__')">
+                    <span class="rfr-person-name">📋 Tümü</span>
+                    <span class="rfr-badges"><span class="rfr-badge">${data.count}</span></span>
+                </div>
+            `;
+            
+            data.people.forEach(p => {
+                const isActive = selectedRfrPerson === p.name;
+                const overdueBadge = p.overdueCount > 0
+                    ? `<span class="rfr-badge overdue" title="${p.overdueCount} task 1 ayı geçti">${p.overdueCount}</span>`
+                    : '';
+                html += `
+                    <div class="rfr-person ${isActive ? 'active' : ''}" onclick="selectRfrPerson(${escapeHtml(JSON.stringify(p.name))})" title="${escapeHtml(p.name)}">
+                        <span class="rfr-person-name">${escapeHtml(p.name)}</span>
+                        <span class="rfr-badges">
+                            <span class="rfr-badge">${p.count}</span>
+                            ${overdueBadge}
+                        </span>
+                    </div>
+                `;
+            });
+            
+            peopleEl.innerHTML = html;
+        }
+        
+        function selectRfrPerson(name) {
+            selectedRfrPerson = name;
+            renderRfrPeople();
+            renderRfrTable();
+        }
+        
+        // Seçili kişiye göre görünen satırları döndürür
+        function getFilteredRfrRows() {
+            if (!lastRfrData || !lastRfrData.rows) return [];
+            if (selectedRfrPerson === null) return [];              // henüz kişi seçilmedi -> boş
+            if (selectedRfrPerson === '__all__') return lastRfrData.rows;
+            return lastRfrData.rows.filter(r => (r.assignee || 'Atanmamış') === selectedRfrPerson);
+        }
+        
+        function formatRfrDate(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '—';
+            return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        // Görünen satırlar için task tablosunu çiz
+        function renderRfrTable() {
+            const tableEl = document.getElementById('rfrTableContent');
+            if (!lastRfrData) return;
+            
+            // Henüz bir kişi seçilmediyse task listesi yerine yönlendirme mesajı göster
+            if (selectedRfrPerson === null) {
+                tableEl.innerHTML = `
+                    <div class="rfr-empty">
+                        👈 Soldaki listeden bir <strong>kişi</strong> seçin; o kişinin RFR taskları burada listelensin.<br>
+                        Tüm taskları görmek için <strong>"📋 Tümü"</strong>ne tıklayın.
+                    </div>
+                `;
+                return;
+            }
+            
+            const rows = getFilteredRfrRows();
+            
+            if (rows.length === 0) {
+                tableEl.innerHTML = `
+                    <div class="rfr-empty">
+                        Seçilen kişiye ait RFR task bulunamadı.
+                    </div>
+                `;
+                return;
+            }
+            
+            let tableHTML = `
+                <table class="rfr-table">
+                    <thead>
+                        <tr>
+                            <th>Atanan Kişi</th>
+                            <th>Task Kodu</th>
+                            <th>Task Özet</th>
+                            <th>Statü</th>
+                            <th>Son Statü Güncelleme Tarihi</th>
+                            <th>Kaç Gündür RFR'de</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            rows.forEach(r => {
+                const keyLink = `<a href="https://hebiar.atlassian.net/browse/${encodeURIComponent(r.key)}" target="_blank" style="color: #81c784; text-decoration: none; font-weight: 500;">${escapeHtml(r.key)}</a>`;
+                const days = r.daysInRfr != null ? r.daysInRfr : '—';
+                const overdueTag = r.overdue ? '<span class="rfr-overdue-tag">1 AY+</span>' : '';
+                tableHTML += `
+                    <tr class="${r.overdue ? 'rfr-overdue' : ''}">
+                        <td>${r.assignee ? escapeHtml(r.assignee) : '<span style="color: var(--text-muted);">Atanmamış</span>'}</td>
+                        <td>${keyLink}</td>
+                        <td>${escapeHtml(r.summary)}</td>
+                        <td><span style="background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 8px; font-size: 12px;">${escapeHtml(r.statusName)}</span></td>
+                        <td>${formatRfrDate(r.rfrSince)}</td>
+                        <td><span class="rfr-days ${r.overdue ? 'overdue' : ''}">${days} gün</span>${overdueTag}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            tableEl.innerHTML = tableHTML;
+        }
+        
+        // Mevcut (kişiye göre filtrelenmiş) sonucu şablonlu Excel (.xlsx) olarak indir
+        async function exportRfrExcel() {
+            if (!lastRfrData || !lastRfrData.rows || lastRfrData.rows.length === 0) {
+                alert('Önce "Yenile" ile RFR tasklarını listeleyin.');
+                return;
+            }
+            
+            // Kişi seçilmediyse tüm taskları, seçildiyse yalnızca o kişinin tasklarını aktar
+            const rows = selectedRfrPerson === null ? lastRfrData.rows : getFilteredRfrRows();
+            const btn = document.getElementById('exportRfrBtn');
+            const oldText = btn ? btn.textContent : null;
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...'; }
+            
+            try {
+                const res = await fetch('/api/rfr/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rows,
+                        status: lastRfrData.status,
+                        overdueDays: lastRfrData.overdueDays
+                    })
+                });
+                
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'Excel oluşturulamadı');
+                }
+                
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const stamp = new Date().toISOString().slice(0, 10);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `rfr-takip_ready-for-release_${stamp}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (error) {
+                alert('❌ Excel indirilemedi: ' + error.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = oldText; }
+            }
+        }
+        
+        // Günlük kapanan task raporu yükleme
+        async function loadClosedReport() {
+            const date = document.getElementById('closedReportDate').value;
+            const container = document.getElementById('closedReportContent');
+            
+            container.innerHTML = `
+                <div class="loading" style="height: 150px;">
+                    <div class="loading-spinner"></div>
+                    <span>Kapanan task raporu yükleniyor...</span>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`/api/daily-closed?date=${date}`);
+                
+                if (!response.ok) {
+                    throw new Error('Kapanan task raporu alınamadı');
+                }
+                
+                const data = await response.json();
+                renderClosedReport(data);
+                
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="error-message" style="text-align: center; padding: 30px;">
+                        ❌ Hata: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderClosedReport(data) {
+            const container = document.getElementById('closedReportContent');
+            const dateStr = new Date(data.date).toLocaleDateString('tr-TR', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            
+            const rows = data.rows || [];
+            const totals = data.totals || { sprint: 0, support: 0, total: 0 };
+            
+            if (rows.length === 0) {
+                container.innerHTML = `
+                    <div class="daily-summary-cards">
+                        <div class="daily-summary-card sprint">
+                            <div class="value">0</div>
+                            <div class="label">Sprint</div>
+                        </div>
+                        <div class="daily-summary-card support">
+                            <div class="value">0</div>
+                            <div class="label">Support</div>
+                        </div>
+                        <div class="daily-summary-card total">
+                            <div class="value">0</div>
+                            <div class="label">Toplam</div>
+                        </div>
+                    </div>
+                    <div style="text-align: center; padding: 30px; color: rgba(255,255,255,0.6);">
+                        <span class="period-badge">${dateStr}</span><br><br>
+                        Bu tarihte kapanan task bulunamadı.
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `
+                <div class="daily-summary-cards">
+                    <div class="daily-summary-card sprint">
+                        <div class="value">${totals.sprint}</div>
+                        <div class="label">Sprint</div>
+                    </div>
+                    <div class="daily-summary-card support">
+                        <div class="value">${totals.support}</div>
+                        <div class="label">Support</div>
+                    </div>
+                    <div class="daily-summary-card total">
+                        <div class="value">${totals.total}</div>
+                        <div class="label">Toplam</div>
+                    </div>
+                    <span class="period-badge" style="margin-left: auto; align-self: center;">${dateStr}</span>
+                </div>
+                
+                <table class="daily-table">
+                    <thead>
+                        <tr>
+                            <th>Kişi</th>
+                            <th>Sprint</th>
+                            <th>Support</th>
+                            <th>Toplam</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(person => `
+                            <tr>
+                                <td>${person.personName}</td>
+                                <td>${person.sprint}</td>
+                                <td>${person.support}</td>
+                                <td><strong>${person.total}</strong></td>
+                            </tr>
+                        `).join('')}
+                        <tr class="subtotal-row">
+                            <td><strong>Alt Toplam</strong></td>
+                            <td><strong>${totals.sprint}</strong></td>
+                            <td><strong>${totals.support}</strong></td>
+                            <td><strong>${totals.total}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const projects = await response.json();
+                
+                const select = document.getElementById('projectSelect');
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.key;
+                    option.textContent = `${project.name} (${project.key})`;
+                    select.appendChild(option);
+                });
+                
+                select.addEventListener('change', async () => {
+                    if (select.value) {
+                        // Proje seçildiğinde proje tab'ına geç
+                        switchTab('project');
+                        await loadPeople(select.value);
+                        loadReport();
+                    }
+                });
+                
+                // Varsayılan tarihleri ayarla
+                const today = new Date();
+                const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+                document.getElementById('endDate').value = today.toISOString().split('T')[0];
+                document.getElementById('startDate').value = monthAgo.toISOString().split('T')[0];
+                
+            } catch (error) {
+                console.error('Projeler yüklenemedi:', error);
+            }
+        }
+        
+        async function loadPeople(projectKey) {
+            try {
+                const response = await fetch(`/api/people/${projectKey}`);
+                const people = await response.json();
+                
+                const select = document.getElementById('personSelect');
+                // Mevcut seçenekleri temizle (ilk hariç)
+                while (select.options.length > 1) {
+                    select.remove(1);
+                }
+                
+                people.forEach(person => {
+                    const option = document.createElement('option');
+                    option.value = person.accountId;
+                    option.textContent = `${person.displayName} (${person.asReporter + person.asAssignee} task)`;
+                    select.appendChild(option);
+                });
+                
+                // Kişi seçildiğinde personType select'i göster
+                select.addEventListener('change', () => {
+                    const personTypeSelect = document.getElementById('personTypeSelect');
+                    personTypeSelect.style.display = select.value ? 'inline-block' : 'none';
+                });
+                
+            } catch (error) {
+                console.error('Kişiler yüklenemedi:', error);
+            }
+        }
+        
+        function onPeriodChange() {
+            const period = document.getElementById('periodSelect').value;
+            const customDates = document.getElementById('customDates');
+            
+            if (period === 'custom') {
+                customDates.classList.add('show');
+            } else {
+                customDates.classList.remove('show');
+                loadReport();
+            }
+        }
+        
+        function buildReportUrl(projectKey) {
+            const period = document.getElementById('periodSelect').value;
+            const personId = document.getElementById('personSelect').value;
+            const personType = document.getElementById('personTypeSelect').value;
+            
+            let url = `/api/report/${projectKey}?period=${period}`;
+            
+            if (period === 'custom') {
+                const startDate = document.getElementById('startDate').value;
+                const endDate = document.getElementById('endDate').value;
+                if (startDate && endDate) {
+                    url += `&startDate=${startDate}&endDate=${endDate}`;
+                }
+            }
+            
+            if (personId) {
+                url += `&personId=${encodeURIComponent(personId)}&personType=${personType}`;
+            }
+            
+            return url;
+        }
+        
+        function getPeriodLabel(period, dateFilter) {
+            const labels = {
+                'all': 'Tüm Zamanlar',
+                'today': 'Bugün',
+                'week': 'Bu Hafta',
+                'month': 'Bu Ay',
+                'custom': dateFilter ? `${dateFilter.startDate} - ${dateFilter.endDate}` : 'Özel'
+            };
+            return labels[period] || period;
+        }
+        
+        async function loadReport() {
+            const projectKey = document.getElementById('projectSelect').value;
+            if (!projectKey) return;
+            
+            const container = document.getElementById('mainContainer');
+            const refreshBtn = document.getElementById('refreshBtn');
+            
+            refreshBtn.disabled = true;
+            refreshBtn.textContent = '⏳ Yükleniyor...';
+            
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <span>Rapor oluşturuluyor... Bu işlem biraz sürebilir.</span>
+                </div>
+            `;
+            
+            try {
+                const url = buildReportUrl(projectKey);
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error('Rapor alınamadı');
+                }
+                
+                currentReport = await response.json();
+                renderDashboard(currentReport);
+                
+                const periodLabel = getPeriodLabel(currentReport.period, currentReport.dateFilter);
+                document.getElementById('generatedTime').textContent = 
+                    `${periodLabel} | Son güncelleme: ${new Date(currentReport.generatedAt).toLocaleString('tr-TR')}`;
+                    
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="error-message">
+                        ❌ Hata: ${error.message}<br>
+                        <small>Jira yapılandırmasını kontrol edin.</small>
+                    </div>
+                `;
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = '🔄 Yenile';
+            }
+        }
+        
+        function renderDashboard(report) {
+            const container = document.getElementById('mainContainer');
+            
+            // Kişi bazlı rapor kartı
+            let personStatsHtml = '';
+            if (report.personStats) {
+                personStatsHtml = `
+                    <div class="chart-card" style="margin-bottom: 30px; background: linear-gradient(135deg, rgba(67, 97, 238, 0.1), rgba(157, 78, 221, 0.1));">
+                        <h3>👤 Kişi Bazlı Özet</h3>
+                        <div class="stats-grid" style="margin-top: 15px;">
+                            <div class="stat-card blue">
+                                <div class="label">Toplam İlgili Task</div>
+                                <div class="value">${report.personStats.totalInvolved}</div>
+                            </div>
+                            <div class="stat-card orange">
+                                <div class="label">Reporter Olarak</div>
+                                <div class="value">${report.personStats.asReporter}</div>
+                                <div class="sub">oluşturduğu task</div>
+                            </div>
+                            <div class="stat-card purple">
+                                <div class="label">Assignee Olarak</div>
+                                <div class="value">${report.personStats.asAssignee}</div>
+                                <div class="sub">atanan task</div>
+                            </div>
+                            <div class="stat-card green">
+                                <div class="label">Çözdüğü Task</div>
+                                <div class="value">${report.personStats.resolvedByPerson}</div>
+                                <div class="sub">ort. ${report.personStats.avgResolutionTime.days} gün</div>
+                            </div>
+                        </div>
+                        ${report.personStats.recentIssues.length > 0 ? `
+                            <h4 style="margin-top: 20px; font-size: 14px; color: rgba(255,255,255,0.7);">Son İşlemler</h4>
+                            <table style="margin-top: 10px;">
+                                <thead>
+                                    <tr>
+                                        <th>Task</th>
+                                        <th>Özet</th>
+                                        <th>Durum</th>
+                                        <th>Rol</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${report.personStats.recentIssues.map(i => `
+                                        <tr>
+                                            <td class="issue-key">${i.key}</td>
+                                            <td class="summary-truncate" title="${i.summary}">${i.summary}</td>
+                                            <td>${i.status}</td>
+                                            <td>
+                                                ${i.isReporter ? '<span class="time-badge" style="background: rgba(251, 133, 0, 0.2); color: #fb8500;">Reporter</span>' : ''}
+                                                ${i.isAssignee ? '<span class="time-badge" style="background: rgba(157, 78, 221, 0.2); color: #9d4edd;">Assignee</span>' : ''}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = `
+                ${personStatsHtml}
+                
+                <!-- Özet Kartlar -->
+                <div class="stats-grid">
+                    <div class="stat-card blue">
+                        <div class="label">Toplam Task</div>
+                        <div class="value">${report.summary.totalIssues}</div>
+                    </div>
+                    <div class="stat-card green">
+                        <div class="label">Kapatılan</div>
+                        <div class="value">${report.summary.closedIssues}</div>
+                        <div class="sub">%${report.summary.closedPercentage} tamamlandı</div>
+                    </div>
+                    <div class="stat-card orange">
+                        <div class="label">Açık</div>
+                        <div class="value">${report.summary.openIssues}</div>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="label">Ortalama Kapanma</div>
+                        <div class="value">${report.averageResolutionTime.days}</div>
+                        <div class="sub">gün</div>
+                    </div>
+                </div>
+                
+                <!-- Grafikler -->
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>📈 Aylık Trend</h3>
+                        <div class="chart-container">
+                            <canvas id="monthlyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>🎯 Öncelik Dağılımı</h3>
+                        <div class="chart-container">
+                            <canvas id="priorityChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <h3>📅 Haftalık Dağılım</h3>
+                        <div class="chart-container">
+                            <canvas id="weekdayChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>👥 En Çok Task Oluşturanlar</h3>
+                        <div class="chart-container">
+                            <canvas id="reportersChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tablolar -->
+                <div class="tables-row">
+                    <div class="table-card">
+                        <h3>🐢 En Uzun Sürede Kapanan Tasklar</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Özet</th>
+                                    <th>Süre</th>
+                                    <th>Atanan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="longestTable"></tbody>
+                        </table>
+                    </div>
+                    <div class="table-card">
+                        <h3>⚡ En Hızlı Kapanan Tasklar</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Özet</th>
+                                    <th>Süre</th>
+                                    <th>Atanan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="fastestTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tables-row" style="margin-top: 25px;">
+                    <div class="table-card">
+                        <h3>📨 En Çok Task Oluşturanlar</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Kişi</th>
+                                    <th>Task Sayısı</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reportersTable"></tbody>
+                        </table>
+                    </div>
+                    <div class="table-card">
+                        <h3>🏆 En Çok Task Çözenler</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Kişi</th>
+                                    <th>Çözülen</th>
+                                    <th>Ort. Süre</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resolversTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            // Grafikleri çiz
+            renderCharts(report);
+            
+            // Tabloları doldur
+            renderTables(report);
+        }
+        
+        function renderCharts(report) {
+            // Önceki grafikleri temizle
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+            
+            // Get theme-aware colors
+            const colors = getChartColors();
+            
+            // Aylık Trend
+            const monthlyCtx = document.getElementById('monthlyChart').getContext('2d');
+            charts.monthly = new Chart(monthlyCtx, {
+                type: 'line',
+                data: {
+                    labels: report.monthlyTrend.map(m => m.month),
+                    datasets: [{
+                        label: 'Çözülen Tasklar',
+                        data: report.monthlyTrend.map(m => m.resolved),
+                        borderColor: '#4361ee',
+                        backgroundColor: 'rgba(67, 97, 238, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: colors.textColor } }
+                    },
+                    scales: {
+                        x: { ticks: { color: colors.tickColor }, grid: { color: colors.gridColor } },
+                        y: { ticks: { color: colors.tickColor }, grid: { color: colors.gridColor } }
+                    }
+                }
+            });
+            
+            // Öncelik Dağılımı
+            const priorityCtx = document.getElementById('priorityChart').getContext('2d');
+            const priorityColors = ['#e63946', '#fb8500', '#ffd60a', '#38b000', '#4361ee'];
+            charts.priority = new Chart(priorityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: report.priorityDistribution.map(p => p.name),
+                    datasets: [{
+                        data: report.priorityDistribution.map(p => p.count),
+                        backgroundColor: priorityColors.slice(0, report.priorityDistribution.length)
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'right',
+                            labels: { color: colors.textColor } 
+                        }
+                    }
+                }
+            });
+            
+            // Haftalık Dağılım
+            const weekdayCtx = document.getElementById('weekdayChart').getContext('2d');
+            charts.weekday = new Chart(weekdayCtx, {
+                type: 'bar',
+                data: {
+                    labels: report.weekdayDistribution.map(d => d.day),
+                    datasets: [{
+                        label: 'Task Sayısı',
+                        data: report.weekdayDistribution.map(d => d.count),
+                        backgroundColor: '#9d4edd'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: colors.textColor } }
+                    },
+                    scales: {
+                        x: { ticks: { color: colors.tickColor }, grid: { color: colors.gridColor } },
+                        y: { ticks: { color: colors.tickColor }, grid: { color: colors.gridColor } }
+                    }
+                }
+            });
+            
+            // En Çok Task Oluşturanlar
+            const reportersCtx = document.getElementById('reportersChart').getContext('2d');
+            charts.reporters = new Chart(reportersCtx, {
+                type: 'bar',
+                data: {
+                    labels: report.topReporters.slice(0, 8).map(r => r.name),
+                    datasets: [{
+                        label: 'Task Sayısı',
+                        data: report.topReporters.slice(0, 8).map(r => r.count),
+                        backgroundColor: '#fb8500'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: colors.textColor } }
+                    },
+                    scales: {
+                        x: { ticks: { color: colors.tickColor }, grid: { color: colors.gridColor } },
+                        y: { ticks: { color: colors.tickColor }, grid: { color: colors.gridColor } }
+                    }
+                }
+            });
+        }
+        
+        // ============== Task Oluşturma Fonksiyonları ==============
+        let createdTasks = [];
+        let taskFormDataLoaded = false;
+        let allSprints = [];
+        let allUsers = [];
+        
+        function switchTaskMode(mode) {
+            document.getElementById('singleModeBtn').classList.toggle('active', mode === 'single');
+            document.getElementById('bulkModeBtn').classList.toggle('active', mode === 'bulk');
+            document.getElementById('singleTaskForm').classList.toggle('active', mode === 'single');
+            document.getElementById('bulkTaskForm').classList.toggle('active', mode === 'bulk');
+        }
+        
+        async function loadTaskFormData() {
+            if (taskFormDataLoaded) return;
+            
+            try {
+                // Projeleri yükle
+                const projectSelect = document.getElementById('taskProject');
+                const bulkProjectSelect = document.getElementById('bulkProject');
+                const response = await fetch('/api/projects');
+                const projects = await response.json();
+                
+                const options = '<option value="">Proje seçin...</option>' + 
+                    projects.map(p => `<option value="${p.key}">${p.name} (${p.key})</option>`).join('');
+                
+                projectSelect.innerHTML = options;
+                bulkProjectSelect.innerHTML = options;
+                
+                // Tüm sprintleri yükle
+                await loadAllSprints();
+                
+                // Tüm kullanıcıları yükle
+                await loadAllUsers();
+                
+                taskFormDataLoaded = true;
+            } catch (error) {
+                console.error('Form verileri yüklenemedi:', error);
+            }
+        }
+        
+        async function loadAllSprints() {
+            try {
+                const response = await fetch('/api/all-sprints');
+                allSprints = await response.json();
+            } catch (error) {
+                console.error('Sprintler yüklenemedi:', error);
+            }
+        }
+        
+        async function loadAllUsers() {
+            try {
+                const response = await fetch('/api/users');
+                allUsers = await response.json();
+            } catch (error) {
+                console.error('Kullanıcılar yüklenemedi:', error);
+            }
+        }
+        
+        async function loadProjectUsers() {
+            // Proje değişince kullanıcıları da yeniden yükleyebiliriz
+            // Şimdilik tüm kullanıcılar zaten yüklü
+        }
+        
+        // Sprint Autocomplete
+        function searchSprints(query) {
+            const dropdown = document.getElementById('sprintDropdown');
+            showSprintResults(dropdown, 'taskSprintSearch', 'taskSprintId', query);
+        }
+        
+        function searchSprintsBulk(query) {
+            const dropdown = document.getElementById('bulkSprintDropdown');
+            showSprintResults(dropdown, 'bulkSprintSearch', 'bulkSprintId', query);
+        }
+        
+        function showSprintResults(dropdown, inputId, hiddenId, query) {
+            const filtered = allSprints.filter(s => 
+                s.name.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 15);
+            
+            if (filtered.length === 0) {
+                dropdown.classList.remove('show');
+                return;
+            }
+            
+            dropdown.innerHTML = filtered.map(sprint => `
+                <div class="autocomplete-item" onclick="selectSprint('${sprint.id}', '${sprint.name.replace(/'/g, "\\'")}', '${inputId}', '${hiddenId}')">
+                    <div class="item-name">${sprint.name}</div>
+                    <div class="item-detail">${sprint.state === 'active' ? '🟢 Aktif' : '🔵 Gelecek'}</div>
+                </div>
+            `).join('');
+            
+            dropdown.classList.add('show');
+        }
+        
+        function selectSprint(id, name, inputId, hiddenId) {
+            document.getElementById(inputId).value = name;
+            document.getElementById(hiddenId).value = id;
+            document.getElementById(inputId).parentElement.querySelector('.autocomplete-dropdown').classList.remove('show');
+        }
+        
+        // User Autocomplete
+        function searchUsers(query) {
+            const dropdown = document.getElementById('assigneeDropdown');
+            const filtered = allUsers.filter(u => 
+                u.displayName.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 10);
+            
+            if (filtered.length === 0) {
+                dropdown.classList.remove('show');
+                return;
+            }
+            
+            dropdown.innerHTML = filtered.map(user => `
+                <div class="autocomplete-item" onclick="selectUser('${user.accountId}', '${user.displayName.replace(/'/g, "\\'")}')">
+                    <div class="item-name">${user.displayName}</div>
+                    <div class="item-detail">${user.emailAddress || ''}</div>
+                </div>
+            `).join('');
+            
+            dropdown.classList.add('show');
+        }
+        
+        function selectUser(id, name) {
+            document.getElementById('taskAssigneeSearch').value = name;
+            document.getElementById('taskAssigneeId').value = id;
+            document.getElementById('assigneeDropdown').classList.remove('show');
+        }
+        
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.autocomplete-wrapper')) {
+                document.querySelectorAll('.autocomplete-dropdown').forEach(d => d.classList.remove('show'));
+            }
+        });
+        
+        async function createTask(event) {
+            event.preventDefault();
+            
+            const btn = document.getElementById('createTaskBtn');
+            const successMsg = document.getElementById('taskSuccessMessage');
+            
+            const projectKey = document.getElementById('taskProject').value;
+            const summary = document.getElementById('taskSummary').value;
+            const description = document.getElementById('taskDescription').value;
+            const sprintId = document.getElementById('taskSprintId').value;
+            const assigneeId = document.getElementById('taskAssigneeId').value;
+            
+            if (!projectKey || !summary) {
+                alert('Lütfen proje ve konu başlığı alanlarını doldurun.');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Oluşturuluyor...';
+            successMsg.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/create-task', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectKey,
+                        summary,
+                        description,
+                        sprintId: sprintId || null,
+                        assigneeId: assigneeId || null
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Task oluşturulamadı');
+                }
+                
+                // Başarılı mesaj göster
+                successMsg.innerHTML = `✅ Task başarıyla oluşturuldu: <a href="https://hebiar.atlassian.net/browse/${result.key}" target="_blank" style="color: inherit; font-weight: bold;">${result.key}</a>`;
+                successMsg.style.display = 'block';
+                
+                // Oluşturulan taskları listeye ekle
+                createdTasks.unshift({
+                    key: result.key,
+                    summary: summary,
+                    assignee: result.assignee || 'Atanmamış',
+                    sprint: result.sprint || 'Yok'
+                });
+                renderCreatedTasks();
+                
+                // Formu temizle
+                document.getElementById('taskSummary').value = '';
+                document.getElementById('taskDescription').value = '';
+                document.getElementById('taskSprintSearch').value = '';
+                document.getElementById('taskSprintId').value = '';
+                document.getElementById('taskAssigneeSearch').value = '';
+                document.getElementById('taskAssigneeId').value = '';
+                
+            } catch (error) {
+                alert('❌ Hata: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Task Oluştur';
+            }
+        }
+        
+        async function createBulkTasks(event) {
+            event.preventDefault();
+            
+            const btn = document.getElementById('createBulkTaskBtn');
+            const successMsg = document.getElementById('taskSuccessMessage');
+            
+            const projectKey = document.getElementById('bulkProject').value;
+            const sprintId = document.getElementById('bulkSprintId').value;
+            const bulkText = document.getElementById('bulkTasks').value.trim();
+            
+            if (!projectKey || !sprintId || !bulkText) {
+                alert('Lütfen proje, sprint ve taskları girin.');
+                return;
+            }
+            
+            const lines = bulkText.split('\n').filter(line => line.trim());
+            if (lines.length === 0) {
+                alert('En az bir task girmelisiniz.');
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = `⏳ Oluşturuluyor (0/${lines.length})...`;
+            successMsg.style.display = 'none';
+            
+            const results = [];
+            let successCount = 0;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                const parts = line.split('|').map(p => p.trim());
+                const summary = parts[0];
+                const assigneeName = parts[1] || null;
+                
+                // Kullanıcı adından ID bul
+                let assigneeId = null;
+                if (assigneeName) {
+                    const user = allUsers.find(u => 
+                        u.displayName.toLowerCase().includes(assigneeName.toLowerCase())
+                    );
+                    if (user) assigneeId = user.accountId;
+                }
+                
+                try {
+                    const response = await fetch('/api/create-task', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            projectKey,
+                            summary,
+                            description: summary,
+                            sprintId,
+                            assigneeId
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        successCount++;
+                        results.push({ success: true, key: result.key, summary, assignee: assigneeName || 'Atanmamış' });
+                        
+                        createdTasks.unshift({
+                            key: result.key,
+                            summary: summary,
+                            assignee: assigneeName || 'Atanmamış',
+                            sprint: document.getElementById('bulkSprintSearch').value
+                        });
+                    } else {
+                        results.push({ success: false, summary, error: result.error });
+                    }
+                } catch (error) {
+                    results.push({ success: false, summary, error: error.message });
+                }
+                
+                btn.textContent = `⏳ Oluşturuluyor (${i + 1}/${lines.length})...`;
+            }
+            
+            // Sonuçları göster
+            const successTasks = results.filter(r => r.success);
+            const failedTasks = results.filter(r => !r.success);
+            
+            let message = `✅ ${successCount}/${lines.length} task başarıyla oluşturuldu.<br><br>`;
+            if (successTasks.length > 0) {
+                message += '<strong>Oluşturulan Tasklar:</strong><br>';
+                message += successTasks.map(t => 
+                    `<a href="https://hebiar.atlassian.net/browse/${t.key}" target="_blank" style="color: inherit;">${t.key}</a> - ${t.summary}`
+                ).join('<br>');
+            }
+            if (failedTasks.length > 0) {
+                message += '<br><br><strong style="color: var(--accent-red);">Başarısız:</strong><br>';
+                message += failedTasks.map(t => `❌ ${t.summary}: ${t.error}`).join('<br>');
+            }
+            
+            successMsg.innerHTML = message;
+            successMsg.style.display = 'block';
+            
+            renderCreatedTasks();
+            
+            // Formu temizle
+            document.getElementById('bulkTasks').value = '';
+            
+            btn.disabled = false;
+            btn.textContent = '🚀 Tüm Taskları Oluştur';
+        }
+        
+        function renderCreatedTasks() {
+            const container = document.getElementById('createdTasksContainer');
+            
+            if (createdTasks.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 13px;">Henüz task oluşturulmadı.</p>';
+                return;
+            }
+            
+            container.innerHTML = createdTasks.map(task => `
+                <div class="created-task-item">
+                    <div>
+                        <a href="https://hebiar.atlassian.net/browse/${task.key}" target="_blank" class="task-key">${task.key}</a>
+                        <span style="margin-left: 10px; color: var(--text-secondary);">${task.summary}</span>
+                    </div>
+                    <div style="color: var(--text-muted); font-size: 12px;">
+                        ${task.assignee} | ${task.sprint}
+                    </div>
+                </div>
+            `).join('');
+        }
+        // ============== Task Oluşturma Fonksiyonları Sonu ==============
+        
+        function renderTables(report) {
+            // En uzun kapanan
+            const longestTable = document.getElementById('longestTable');
+            longestTable.innerHTML = report.longestResolution.slice(0, 8).map(issue => `
+                <tr>
+                    <td class="issue-key">${issue.key}</td>
+                    <td class="summary-truncate" title="${issue.summary}">${issue.summary}</td>
+                    <td><span class="time-badge slow">${issue.resolutionTime.days} gün</span></td>
+                    <td>${issue.assignee}</td>
+                </tr>
+            `).join('');
+            
+            // En hızlı kapanan
+            const fastestTable = document.getElementById('fastestTable');
+            fastestTable.innerHTML = report.fastestResolution.slice(0, 8).map(issue => `
+                <tr>
+                    <td class="issue-key">${issue.key}</td>
+                    <td class="summary-truncate" title="${issue.summary}">${issue.summary}</td>
+                    <td><span class="time-badge fast">${issue.resolutionTime.hours < 24 ? issue.resolutionTime.hours + ' saat' : issue.resolutionTime.days + ' gün'}</span></td>
+                    <td>${issue.assignee}</td>
+                </tr>
+            `).join('');
+            
+            // En çok task oluşturanlar
+            const reportersTable = document.getElementById('reportersTable');
+            reportersTable.innerHTML = report.topReporters.slice(0, 10).map(reporter => `
+                <tr>
+                    <td class="reporter-name">${reporter.name}</td>
+                    <td><span class="count-badge">${reporter.count}</span></td>
+                </tr>
+            `).join('');
+            
+            // En çok task çözenler
+            const resolversTable = document.getElementById('resolversTable');
+            resolversTable.innerHTML = report.topResolvers.slice(0, 10).map(resolver => `
+                <tr>
+                    <td class="reporter-name">${resolver.name}</td>
+                    <td><span class="count-badge">${resolver.count}</span></td>
+                    <td>${resolver.avgResolutionDays} gün</td>
+                </tr>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
