@@ -7,6 +7,13 @@ import { isConfigured, getConfig } from "./config.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Task oluşturma ekranı tamamen Hebiar Jira kapsamında çalışır.
+// getConfig().baseUrl Olka'yı gösterebildiği için sabit URL kullanılır.
+const HEBIAR_BASE_URL = (
+  process.env.HEBIAR_BASE_URL || "https://hebiar.atlassian.net"
+).replace(/\/$/, "");
+const HEBIAR_WEEKLY_BOARD_ID = process.env.HEBIAR_WEEKLY_BOARD_ID || "54";
+
 class DashboardServer {
   constructor() {
     this.app = express();
@@ -15,14 +22,41 @@ class DashboardServer {
     this.setupRoutes();
   }
 
+  async getHebiarClient(apiPath = "/rest/api/3") {
+    const { email, apiToken } = getConfig();
+    const axios = (await import("axios")).default;
+    const auth = Buffer.from(`${email}:${apiToken}`).toString("base64");
+
+    return axios.create({
+      baseURL: `${HEBIAR_BASE_URL}${apiPath}`,
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      timeout: 30000,
+    });
+  }
+
   setupMiddleware() {
     this.app.use(express.json({ limit: "10mb" }));
-    this.app.use(express.static(path.join(__dirname, "../public")));
+    // HTML asla cache'lenmemeli: eski dashboard.html yeni API şemasıyla uyuşmayıp
+    // sekmelerin boş/sıfır görünmesine yol açıyor.
+    this.app.use(
+      express.static(path.join(__dirname, "../public"), {
+        setHeaders: (res, filePath) => {
+          if (filePath.endsWith(".html")) {
+            res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          }
+        },
+      }),
+    );
   }
 
   setupRoutes() {
     // Ana sayfa
     this.app.get("/", (req, res) => {
+      res.setHeader("Cache-Control", "no-cache, must-revalidate");
       res.sendFile(path.join(__dirname, "../public/dashboard.html"));
     });
 
@@ -34,16 +68,26 @@ class DashboardServer {
       });
     });
 
-    // Projeler listesi
+    // Projeler listesi (Hebiar Jira)
     this.app.get("/api/projects", async (req, res) => {
       try {
         if (!isConfigured()) {
           return res.status(400).json({ error: "Jira yapılandırması eksik" });
         }
 
-        const jiraClient = (await import("./jira-client.js")).default;
-        jiraClient.init();
-        const projects = await jiraClient.getProjects();
+        const client = await this.getHebiarClient();
+        const projects = [];
+        let startAt = 0;
+
+        for (let page = 0; page < 50; page++) {
+          const response = await client.get("/project/search", {
+            params: { startAt, maxResults: 50, orderBy: "name" },
+          });
+          const values = response.data.values || [];
+          projects.push(...values);
+          if (response.data.isLast || values.length === 0) break;
+          startAt += values.length;
+        }
 
         res.json(
           projects.map((p) => ({
@@ -53,6 +97,10 @@ class DashboardServer {
           })),
         );
       } catch (error) {
+        console.error(
+          "Proje listesi hatası:",
+          error.response?.data || error.message,
+        );
         res.status(500).json({ error: error.message });
       }
     });
@@ -378,18 +426,20 @@ Proje Yönetimi
       }
     });
 
-    // Kullanıcı listesi
+    // Kullanıcı listesi (Hebiar Jira)
     this.app.get("/api/users", async (req, res) => {
       try {
         if (!isConfigured()) {
           return res.status(400).json({ error: "Jira yapılandırması eksik" });
         }
 
-        const jiraClient = (await import("./jira-client.js")).default;
-        jiraClient.init();
+        const client = await this.getHebiarClient();
 
         // Tüm kullanıcıları çekmek için genel arama
-        const users = await jiraClient.searchUsers("");
+        const response = await client.get("/user/search", {
+          params: { query: "", maxResults: 1000 },
+        });
+        const users = response.data || [];
 
         res.json(
           users.map((u) => ({
@@ -404,26 +454,20 @@ Proje Yönetimi
       }
     });
 
-    // Sprint listesi (Board 54)
+    // Sprint listesi (Hebiar weekly board)
     this.app.get("/api/sprints", async (req, res) => {
       try {
         if (!isConfigured()) {
           return res.status(400).json({ error: "Jira yapılandırması eksik" });
         }
 
-        const { baseUrl, email, apiToken } = getConfig();
-        const auth = Buffer.from(`${email}:${apiToken}`).toString("base64");
-        const axios = (await import("axios")).default;
+        const client = await this.getHebiarClient("/rest/agile/1.0");
 
         // Board 54'ten tüm aktif ve future sprintleri çek
-        const response = await axios.get(
-          `${baseUrl}/rest/agile/1.0/board/54/sprint`,
+        const response = await client.get(
+          `/board/${HEBIAR_WEEKLY_BOARD_ID}/sprint`,
           {
             params: { state: "active,future" },
-            headers: {
-              Authorization: `Basic ${auth}`,
-              "Content-Type": "application/json",
-            },
           },
         );
 
@@ -442,26 +486,20 @@ Proje Yönetimi
       }
     });
 
-    // Tüm sprintler (Autocomplete için)
+    // Tüm sprintler (Autocomplete için — Hebiar weekly board)
     this.app.get("/api/all-sprints", async (req, res) => {
       try {
         if (!isConfigured()) {
           return res.status(400).json({ error: "Jira yapılandırması eksik" });
         }
 
-        const { baseUrl, email, apiToken } = getConfig();
-        const auth = Buffer.from(`${email}:${apiToken}`).toString("base64");
-        const axios = (await import("axios")).default;
+        const client = await this.getHebiarClient("/rest/agile/1.0");
 
         // Board 54'ten tüm aktif ve future sprintleri çek
-        const response = await axios.get(
-          `${baseUrl}/rest/agile/1.0/board/54/sprint`,
+        const response = await client.get(
+          `/board/${HEBIAR_WEEKLY_BOARD_ID}/sprint`,
           {
             params: { state: "active,future", maxResults: 100 },
-            headers: {
-              Authorization: `Basic ${auth}`,
-              "Content-Type": "application/json",
-            },
           },
         );
 
@@ -487,7 +525,7 @@ Proje Yönetimi
       }
     });
 
-    // Task oluşturma
+    // Task oluşturma (Hebiar Jira)
     this.app.post("/api/create-task", async (req, res) => {
       try {
         if (!isConfigured()) {
@@ -503,17 +541,43 @@ Proje Yönetimi
             .json({ error: "Proje ve konu başlığı zorunludur" });
         }
 
-        const jiraClient = (await import("./jira-client.js")).default;
-        jiraClient.init();
+        const client = await this.getHebiarClient();
+        const agileClient = await this.getHebiarClient("/rest/agile/1.0");
 
-        // Task oluştur
-        const issue = await jiraClient.createIssue(
-          projectKey,
-          summary,
-          description || "",
-          "Task",
-        );
-        const issueKey = issue.key;
+        // Projenin task tipini bul (bazı Hebiar projelerinde "Görev")
+        let issuetype = { name: "Task" };
+        try {
+          const metaResponse = await client.get(
+            `/issue/createmeta/${projectKey}/issuetypes`,
+          );
+          const types = (metaResponse.data.issueTypes || []).filter(
+            (t) => !t.subtask,
+          );
+          const picked =
+            types.find((t) => /^(task|görev)$/i.test(t.name)) || types[0];
+          if (picked) issuetype = { id: picked.id };
+        } catch (e) {
+          console.error("Issue type belirlenemedi:", e.message);
+        }
+
+        const createResponse = await client.post("/issue", {
+          fields: {
+            project: { key: projectKey },
+            summary,
+            description: {
+              type: "doc",
+              version: 1,
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: description || "" }],
+                },
+              ],
+            },
+            issuetype,
+          },
+        });
+        const issueKey = createResponse.data.key;
 
         let assigneeName = null;
         let sprintName = null;
@@ -521,10 +585,11 @@ Proje Yönetimi
         // Assignee ata
         if (assigneeId) {
           try {
-            await jiraClient.assignIssue(issueKey, assigneeId);
-            const users = await jiraClient.searchUsers("");
-            const user = users.find((u) => u.accountId === assigneeId);
-            assigneeName = user ? user.displayName : "Atandı";
+            await client.put(`/issue/${issueKey}/assignee`, { accountId: assigneeId });
+            const userResponse = await client.get("/user", {
+              params: { accountId: assigneeId },
+            });
+            assigneeName = userResponse.data.displayName || "Atandı";
           } catch (e) {
             console.error("Assignee atanamadı:", e.message);
           }
@@ -533,33 +598,12 @@ Proje Yönetimi
         // Sprint'e ekle
         if (sprintId) {
           try {
-            const { baseUrl, email, apiToken } = getConfig();
-            const auth = Buffer.from(`${email}:${apiToken}`).toString("base64");
-            const axios = (await import("axios")).default;
-
-            await axios.post(
-              `${baseUrl}/rest/agile/1.0/sprint/${sprintId}/issue`,
-              {
-                issues: [issueKey],
-              },
-              {
-                headers: {
-                  Authorization: `Basic ${auth}`,
-                  "Content-Type": "application/json",
-                },
-              },
-            );
+            await agileClient.post(`/sprint/${sprintId}/issue`, {
+              issues: [issueKey],
+            });
 
             // Sprint adını al
-            const sprintResponse = await axios.get(
-              `${baseUrl}/rest/agile/1.0/sprint/${sprintId}`,
-              {
-                headers: {
-                  Authorization: `Basic ${auth}`,
-                  "Content-Type": "application/json",
-                },
-              },
-            );
+            const sprintResponse = await agileClient.get(`/sprint/${sprintId}`);
             sprintName = sprintResponse.data.name;
           } catch (e) {
             console.error("Sprint eklenemedi:", e.message);
@@ -576,8 +620,15 @@ Proje Yönetimi
           sprint: sprintName,
         });
       } catch (error) {
-        console.error("Task oluşturma hatası:", error);
-        res.status(500).json({ error: error.message });
+        const jiraErrors = error.response?.data;
+        const detail = jiraErrors
+          ? [
+              ...(jiraErrors.errorMessages || []),
+              ...Object.values(jiraErrors.errors || {}),
+            ].join(" | ")
+          : "";
+        console.error("Task oluşturma hatası:", detail || error.message);
+        res.status(500).json({ error: detail || error.message });
       }
     });
 
@@ -790,6 +841,337 @@ Proje Yönetimi
         res.send(buffer);
       } catch (error) {
         console.error("RFR Takip Excel export hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Reject Takip - statüsü "Reject"/"REJECT" olan Hebiar maddeleri (HDV hariç,
+    // proje bazlı)
+    this.app.get("/api/reject/report", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const service = (await import("./reject-report.js")).default;
+        const report = await service.getRejectTasks();
+        res.json(report);
+      } catch (error) {
+        console.error("Reject Takip rapor hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // HDV Son Durum - HDV projesinde yalnızca belirli kişilere atanmış tasklar
+    this.app.get("/api/hdv-status/report", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const service = (await import("./hdv-status-report.js")).default;
+        const report = await service.getHdvStatusTasks();
+        res.json(report);
+      } catch (error) {
+        console.error("HDV Son Durum rapor hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // HDV Son Durum - şablonlu Excel (.xlsx) dışa aktarma
+    this.app.post("/api/hdv-status/export", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const { rows } = req.body || {};
+        if (!Array.isArray(rows)) {
+          return res
+            .status(400)
+            .json({ error: "Geçersiz veri: rows listesi gerekli" });
+        }
+
+        const service = (await import("./hdv-status-report.js")).default;
+        const buffer = await service.buildHdvStatusXlsxBuffer(rows);
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const filename = `hdv-son-durum_${stamp}.xlsx`;
+
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+        res.send(buffer);
+      } catch (error) {
+        console.error("HDV Son Durum Excel export hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Reject Takip - şablonlu Excel (.xlsx) dışa aktarma
+    this.app.post("/api/reject/export", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const { rows, statuses, projectCount } = req.body || {};
+        if (!Array.isArray(rows)) {
+          return res
+            .status(400)
+            .json({ error: "Geçersiz veri: rows listesi gerekli" });
+        }
+
+        const service = (await import("./reject-report.js")).default;
+        const buffer = await service.buildRejectXlsxBuffer(rows, {
+          statuses,
+          projectCount,
+        });
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const filename = `reject-takip_${stamp}.xlsx`;
+
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+        res.send(buffer);
+      } catch (error) {
+        console.error("Reject Takip Excel export hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Olka Sprint Rapor - Hebiar weekly board'un en son kapanan sprintindeki
+    // OLK + SKCH maddelerini tamamlanan/kalan/bloke olarak kategorize eder.
+    // İsteğe bağlı ?sprintId ile başka bir kapanan sprint seçilebilir.
+    this.app.get("/api/olka-sprint/report", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const { sprintId } = req.query;
+        const service = (await import("./olka-sprint-report.js")).default;
+        const report = await service.getSprintReport(sprintId);
+        res.json(report);
+      } catch (error) {
+        console.error("Olka Sprint Rapor hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Olka Sprint Rapor - şablonlu Excel (.xlsx) dışa aktarma
+    this.app.post("/api/olka-sprint/export", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const data = req.body || {};
+        if (!data.stats || !Array.isArray(data.rows)) {
+          return res.status(400).json({
+            error: "Geçersiz veri: rapor verisi (stats + rows) gerekli",
+          });
+        }
+
+        const service = (await import("./olka-sprint-report.js")).default;
+        const buffer = await service.buildXlsxBuffer(data);
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const sprintName = (
+          data.sprint && data.sprint.name ? data.sprint.name : "sprint"
+        ).replace(/[^a-z0-9]+/gi, "-");
+        const filename = `olka-sprint-rapor_${sprintName}_${stamp}.xlsx`;
+
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+        res.send(buffer);
+      } catch (error) {
+        console.error("Olka Sprint Rapor Excel export hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Proje Raporu - weekly board 54 sprintleri (aktif + future + kapanan)
+    this.app.get("/api/project-report/sprints", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const service = (await import("./project-report.js")).default;
+        const sprints = await service.getSprints();
+        res.json(sprints);
+      } catch (error) {
+        console.error("Proje Raporu sprint listesi hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Proje Raporu - seçilen sprintte proje bazlı task kırılımı (sayı + yüzde)
+    this.app.get("/api/project-report/breakdown", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const { sprintId } = req.query;
+        const service = (await import("./project-report.js")).default;
+        const report = await service.getBreakdown(sprintId);
+        res.json(report);
+      } catch (error) {
+        console.error("Proje Raporu kırılım hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Proje Raporu - Excel (.xlsx) dışa aktarma
+    this.app.post("/api/project-report/export", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const data = req.body || {};
+        if (!Array.isArray(data.projects)) {
+          return res.status(400).json({
+            error: "Geçersiz veri: proje kırılımı (projects) gerekli",
+          });
+        }
+
+        const service = (await import("./project-report.js")).default;
+        const buffer = await service.buildXlsxBuffer(data);
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const sprintName = (
+          data.sprint && data.sprint.name ? data.sprint.name : "sprint"
+        ).replace(/[^a-z0-9]+/gi, "-");
+        const filename = `proje-raporu_${sprintName}_${stamp}.xlsx`;
+
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+        res.send(buffer);
+      } catch (error) {
+        console.error("Proje Raporu Excel export hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Etiket Eşitle - Olka etiketlerini CLLINK ile eşleşen Hebiar tasklarına
+    // birebir kopyalar (manuel tetiklenir). body.dryRun=true ise yalnızca önizleme.
+    this.app.post("/api/label-sync/run", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const dryRun = req.body?.dryRun === true;
+        const service = (await import("./label-sync-report.js")).default;
+        const logLines = [];
+        const result = await service.syncLabels({
+          dryRun,
+          onLog: (m) => logLines.push(m),
+        });
+        res.json({ ...result, logLines });
+      } catch (error) {
+        console.error("Etiket eşitleme hatası:", error.message);
+        const status = /zaten çalışıyor/i.test(error.message) ? 409 : 500;
+        res.status(status).json({ error: error.message });
+      }
+    });
+
+    // MC Panosu - Madame Coco (MC) projesinin maddelerini gerçek Kanban board
+    // sütun düzenine göre statü bazında gruplayan pano verisi.
+    this.app.get("/api/mc-board/report", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const service = (await import("./mc-board-report.js")).default;
+        const report = await service.getBoardData();
+        res.json(report);
+      } catch (error) {
+        console.error("MC Panosu rapor hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Olka Roadmap - OLK projesinin ay-etiketli maddelerini roadmap tamamlanma
+    // verisiyle döner. Frontend haftalık/aylık/yıllık/özel dönem filtresini
+    // bu ay bilgisine göre client-side uygular.
+    this.app.get("/api/olka-roadmap/report", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const service = (await import("./olka-roadmap-report.js")).default;
+        const report = await service.getReport();
+        res.json(report);
+      } catch (error) {
+        console.error("Olka Roadmap rapor hatası:", error.message);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Olka Roadmap - seçilen dönem için şablonlu Excel (.xlsx) dışa aktarma
+    this.app.post("/api/olka-roadmap/export", async (req, res) => {
+      try {
+        if (!isConfigured()) {
+          return res.status(400).json({ error: "Jira yapılandırması eksik" });
+        }
+
+        const data = req.body || {};
+        if (!Array.isArray(data.rows)) {
+          return res
+            .status(400)
+            .json({ error: "Geçersiz veri: madde listesi (rows) gerekli" });
+        }
+
+        const service = (await import("./olka-roadmap-report.js")).default;
+        const buffer = await service.buildXlsxBuffer(data);
+
+        const stamp = new Date().toISOString().slice(0, 10);
+        const periodSlug = (data.periodLabel || "roadmap").replace(
+          /[^a-z0-9]+/gi,
+          "-",
+        );
+        const filename = `olka-roadmap_${periodSlug}_${stamp}.xlsx`;
+
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}"`,
+        );
+        res.send(buffer);
+      } catch (error) {
+        console.error("Olka Roadmap Excel export hatası:", error.message);
         res.status(500).json({ error: error.message });
       }
     });

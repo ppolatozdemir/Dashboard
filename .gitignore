@@ -4,6 +4,9 @@ node_modules/
 # Logs
 *.log
 
+# Rapor çıktıları
+*.xlsx
+
 # Environment / secrets
 .env
 .env.*

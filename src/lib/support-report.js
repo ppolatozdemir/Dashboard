@@ -49,6 +49,49 @@ class SupportReportService {
   }
 
   /**
+   * Hebiar Agile API (rest/agile/1.0) için axios instance oluştur.
+   * Weekly board (54) Hebiar'da olduğundan config.baseUrl (Olka'yı gösterebilir)
+   * yerine her zaman Hebiar'a bağlanır.
+   */
+  getHebiarAgileClient() {
+    const { email, apiToken } = getConfig();
+    const auth = Buffer.from(`${email}:${apiToken}`).toString("base64");
+
+    return axios.create({
+      baseURL: `${HEBIAR_BASE_URL}/rest/agile/1.0`,
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+    });
+  }
+
+  /**
+   * Hebiar weekly board'undaki (54) AKTİF sprint id'lerini döner.
+   * openSprints() tüm panoları kapsadığı için (ör. MC projesinin "MC Sprint 1")
+   * weekly-only raporlarda bu id'lerle filtrelemek gerekir. Erişilemezse [] döner.
+   *
+   * Dikkat: board 54'ün aktif sprint listesi, board filtresine takılan başka
+   * panoların sprintlerini de içerebilir (ör. originBoardId=50 olan "MC Sprint 1").
+   * Bu yüzden YALNIZCA weekly board'dan (54) doğan sprintler alınır.
+   */
+  async getActiveWeeklySprintIds() {
+    try {
+      const client = this.getHebiarAgileClient();
+      const res = await client.get(`/board/54/sprint`, {
+        params: { state: "active" },
+      });
+      return (res.data.values || [])
+        .filter((s) => s.originBoardId === 54)
+        .map((s) => s.id);
+    } catch (error) {
+      console.error("Weekly sprint bilgisi alınamadı:", error.message);
+      return [];
+    }
+  }
+
+  /**
    * Hebiar Jira üzerinde JQL araması yapar (search/jql endpoint).
    * Bu endpoint sonuçları nextPageToken ile sayfalar (tek sayfa ~100 kayıt) ve
    * gönderilen maxResults'ı yok sayar; bu yüzden maxResults'a ulaşana kadar
@@ -635,8 +678,14 @@ class SupportReportService {
 
     console.log(`📊 Günlük iş yükü raporu oluşturuluyor...`);
 
-    // 1. Aktif sprintteki tamamlanmamış taskları çek
-    const sprintJql = `sprint in openSprints() AND sprint NOT IN futureSprints() AND statusCategory != Done ORDER BY "cf[10020]" DESC`;
+    // 1. Aktif WEEKLY sprintteki (Hebiar board 54) tamamlanmamış taskları çek.
+    // Not: openSprints() TÜM panolardaki açık sprintleri kapsar (ör. MC projesinin
+    // "MC Sprint 1" sprinti). Bu rapor YALNIZCA weekly board'un aktif sprint(ler)ini
+    // içermelidir; bu yüzden aktif weekly sprint id'lerine göre filtreliyoruz.
+    const weeklySprintIds = await this.getActiveWeeklySprintIds();
+    const sprintJql = weeklySprintIds.length
+      ? `sprint in (${weeklySprintIds.join(", ")}) AND statusCategory != Done ORDER BY "cf[10020]" DESC`
+      : `sprint in openSprints() AND sprint NOT IN futureSprints() AND statusCategory != Done ORDER BY "cf[10020]" DESC`;
     const sprintFields = ["summary", "status", "assignee", "project"];
 
     const sprintIssues = await this.searchHebiarJql(
@@ -646,8 +695,11 @@ class SupportReportService {
     );
     console.log(`✅ Aktif sprintte ${sprintIssues.length} açık task bulundu.`);
 
-    // 2. Customer Support = Evet olan ve tamamlanmamış taskları çek
-    const supportJql = `project = "Commercelab Service Desk Jira" and statusCategory != Done and "Customer Support[Dropdown]"=Evet order by created desc`;
+    // 2. Customer Support = Evet olan açık support taskları çek.
+    // Statü allow-list'i ve "created >= -100d" penceresi kullanıcının verdiği JQL
+    // ile birebir aynıdır. Bu JQL "On Hold" ve "test" statülerini bilerek dahil
+    // ettiği için aşağıdaki hariç tutulan statü filtresi support'a UYGULANMAZ.
+    const supportJql = `created >= -100d AND status in (Backlog, "Customer Action Required", Escalated, "In Progress", "On Hold", Open, Pending, Reopened, "Request For Development", "Selected For Development", test, Returned, "To Do", Uat, "Waiting for customer", "Waiting for support", "Work in progress") AND "Customer Support[Dropdown]" = Evet ORDER BY assignee ASC, created DESC`;
     const supportFields = [
       "summary",
       "status",
@@ -659,7 +711,7 @@ class SupportReportService {
     const supportIssues = await this.searchHebiarJql(
       supportJql,
       supportFields,
-      500,
+      2000,
     );
     console.log(
       `✅ Support alanında ${supportIssues.length} açık task bulundu.`,
@@ -676,6 +728,8 @@ class SupportReportService {
       block: "Block",
       "qa testing": "QA Testing",
       test: "Test",
+      // "Deleted" statüsü Done kategorisinde olmadığı için JQL'e takılmıyor; iş yükü değil.
+      deleted: "Deleted",
     };
     const excludedStatuses = Object.keys(excludedStatusLabels);
     const normalizeStatus = (issue) =>
@@ -686,21 +740,21 @@ class SupportReportService {
     const filteredSprintIssues = sprintIssues.filter(
       (i) => !isExcludedStatus(i),
     );
-    const filteredSupportIssues = supportIssues.filter(
-      (i) => !isExcludedStatus(i),
-    );
+    // Support tarafı JQL'deki statü allow-list'i ile zaten sınırlıdır (On Hold ve
+    // test dahil), bu yüzden hariç tutulan statü filtresi support'a uygulanmaz;
+    // kişi bazlı support sayısı verilen JQL sonucuyla birebir eşleşir.
+    const filteredSupportIssues = supportIssues;
     console.log(
       `🚫 Hariç tutulan statüler nedeniyle ${
         sprintIssues.length - filteredSprintIssues.length
-      } sprint, ${
-        supportIssues.length - filteredSupportIssues.length
-      } support task sayılmadı.`,
+      } sprint task sayılmadı.`,
     );
 
-    // Hariç tutulan statülerin kutucuklarda gösterilecek sayıları (tekilleştirilmiş)
+    // Hariç tutulan statülerin kutucuklarda gösterilecek sayıları (tekilleştirilmiş).
+    // Sadece sprint tarafı için hesaplanır; support tarafı allow-list ile sınırlıdır.
     const excludedStatusCountMap = new Map(excludedStatuses.map((s) => [s, 0]));
     const seenExcludedKeys = new Set();
-    [...sprintIssues, ...supportIssues].forEach((issue) => {
+    sprintIssues.forEach((issue) => {
       const status = normalizeStatus(issue);
       if (!excludedStatusCountMap.has(status)) return;
       if (seenExcludedKeys.has(issue.key)) return;
@@ -756,12 +810,7 @@ class SupportReportService {
       personMap.get(personId).support++;
     });
 
-    // Toplamları hesapla
-    personMap.forEach((person) => {
-      person.total = person.sprint + person.support;
-    });
-
-    // Hariç tutulacak kişiler
+    // Hariç tutulacak kişiler (kişi bazlı gizleme).
     const excludedNames = [
       "Hakan Gürses",
       "Hakan Gurses",
@@ -784,18 +833,27 @@ class SupportReportService {
 
     // Küçük harfe çevrilmiş hariç listesi
     const excludedNamesLower = excludedNames.map((n) => n.toLowerCase());
+    const isExcludedPerson = (personName) =>
+      excludedNamesLower.some(
+        (name) =>
+          personName.toLowerCase().includes(name) ||
+          name.includes(personName.toLowerCase()),
+      );
 
-    // Array'e çevir ve sırala (toplam'a göre)
+    // Toplamları hesapla. Kişi gizleme filtresi SADECE sprint tarafına uygulanır:
+    // gizlenen kişilerin sprint sayısı 0'lanır, ancak support sayısı korunur ki
+    // support toplamı verilen JQL sonucuyla (tüm kişiler dahil) birebir eşleşsin.
+    personMap.forEach((person) => {
+      if (isExcludedPerson(person.personName)) {
+        person.sprint = 0;
+      }
+      person.total = person.sprint + person.support;
+    });
+
+    // Array'e çevir ve sırala (toplam'a göre). total > 0 olan herkes gösterilir;
+    // böylece gizlenen kişiler yalnızca support tasklarıyla tabloda görünebilir.
     const rows = Array.from(personMap.values())
-      .filter(
-        (p) =>
-          p.total > 0 &&
-          !excludedNamesLower.some(
-            (name) =>
-              p.personName.toLowerCase().includes(name) ||
-              name.includes(p.personName.toLowerCase()),
-          ),
-      )
+      .filter((p) => p.total > 0)
       .sort((a, b) => b.total - a.total);
 
     // Alt toplam hesapla
