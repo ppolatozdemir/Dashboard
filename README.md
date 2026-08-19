@@ -25,6 +25,10 @@ Jira Cloud verilerini tek bir web arayüzünde raporlayan, operasyonel görevler
 
 - **Konfigürasyon:** `conf`
 
+- **Kimlik ve yetki:** CommerceLab User Service, HttpOnly cookie, rol tabanlı erişim
+
+- **Yerel kullanıcı deposu:** SQLite (`better-sqlite3`) ve `scrypt` şifre özeti
+
 - **Frontend:** HTML, CSS, Vanilla JavaScript
 
 - **Grafikler:** Chart.js
@@ -61,6 +65,7 @@ Dashboard'daki başlıca işlevler:
 | Task oluşturma | Hebiar Jira üzerinde yeni task oluşturur. |
 | Dışa aktarma | Desteklenen raporları `.xlsx` olarak indirir. |
 | Sprint uyarıları | SMTP yapılandırılmışsa ilgili kişilere uyarı e-postası gönderir. |
+| Kimlik ve kullanıcı yönetimi | CommerceLab veya yerel kullanıcı girişi, çoklu tenant seçimi ve rol bazlı yetkilendirme sağlar. |
 
 ### Why — Neden?
 
@@ -87,7 +92,7 @@ Günlük iş yükü kontrolünde, sprint planlama ve kapanışlarında, release/
 
 ### How — Nasıl?
 
-Express sunucusu `src/public/dashboard.html` dosyasını sunar. Tarayıcı, `/api/*` rotalarına istek gönderir; `src/lib` altındaki servisler Jira API'lerinden verileri alır, dönüştürür ve gerektiğinde Excel üretir. Kimlik doğrulama, yapılandırmaya kaydedilen e-posta ve API token ile Basic Auth üzerinden yapılır.
+Express sunucusu `src/public/dashboard.html` dosyasını sunar. Tarayıcı, `/api/*` rotalarına istek gönderir; `src/lib` altındaki servisler Jira API'lerinden verileri alır, dönüştürür ve gerektiğinde Excel üretir. Dashboard oturumu CommerceLab User Service veya SQLite'taki yerel kullanıcılarla açılır. Jira veri erişimi ayrıca yapılandırmaya kaydedilen Jira e-posta/API token çiftiyle yapılır.
 
 ## Teknoloji ve yapı
 
@@ -98,19 +103,31 @@ Express sunucusu `src/public/dashboard.html` dosyasını sunar. Tarayıcı, `/ap
 - ExcelJS
 - Nodemailer
 - `conf`
+- SQLite (`better-sqlite3`)
 - Chart.js ve html2canvas (CDN)
 
 ```text
 src/
-├── index.js                 # CLI giriş noktası
-├── dashboard.js             # Web dashboard giriş noktası
-├── commands/                # config, issue, project, search ve sprint komutları
+├── index.js                 # CLI bootstrap
+├── dashboard.js             # Web dashboard bootstrap
+├── cli/                     # CLI programı ve hata yönetimi
+├── commands/                # CLI komutları
+├── auth/                    # Auth service, repository, policy ve yardımcıları
+├── server/
+│   ├── app.js               # Express uygulama bileşimi
+│   ├── controllers/         # HTTP istek/yanıt katmanı
+│   ├── middleware/          # Kimlik ve yetki kontrolleri
+│   └── routes/              # Auth, rapor ve dashboard rotaları
+├── shared/                  # Ortak dış servis istemcileri
 ├── lib/
-│   ├── dashboard-server.js  # Express rotaları
+│   ├── dashboard-server.js  # Geriye uyumlu sunucu adaptörü
+│   ├── auth-service.js      # Geriye uyumlu auth adaptörü
 │   ├── jira-client.js       # Jira REST/Agile istemcisi
 │   └── *-report.js          # Raporlama ve Excel servisleri
 └── public/
-    └── dashboard.html       # Tek sayfalık dashboard arayüzü
+    ├── dashboard.html       # Dashboard işaretleme yapısı
+    ├── styles/              # Özellik bazlı stiller
+    └── scripts/             # Core, rapor ve task arayüz modülleri
 ```
 
 Depo kökündeki `explore-*.js`, `assign-*.js`, `create-*.js` ve benzeri dosyalar belirli operasyonlara yönelik yardımcı/bakım betikleridir; ana dashboard akışının parçası değildir.
@@ -119,7 +136,7 @@ Depo kökündeki `explore-*.js`, `assign-*.js`, `create-*.js` ve benzeri dosyala
 
 ### Gereksinimler
 
-- Node.js ve npm
+- Node.js 22+ ve npm
 - Jira Cloud hesabı
 - Atlassian API token
 - Erişilecek proje, board ve custom field'lar için yeterli Jira izinleri
@@ -150,14 +167,14 @@ node src/index.js config test
 Web dashboard'u başlatın:
 
 ```bash
-node src/dashboard.js
+npm start
 ```
 
 Farklı port kullanmak için:
 
 ```powershell
 $env:PORT = "4000"
-node src/dashboard.js
+npm start
 ```
 
 Ardından `http://localhost:3002` veya seçtiğiniz portu açın. Sağlık kontrolü:
@@ -187,6 +204,30 @@ node src/index.js project list
 
 `npm link` çalıştırıldıktan sonra aynı komutlar `jira config show`, `jira issue view PROJE-123` gibi doğrudan `jira` ile kullanılabilir.
 
+## Giriş ve yetkilendirme
+
+İki giriş yöntemi bulunur:
+
+1. **CommerceLab ile giriş:** Sunucu `POST /Auth/login` çağrısını User Service'e iletir. Birden fazla tenant dönerse kullanıcı seçim yapar. Token, backend'in korumalı `/Roles/GetRolesAsync` ucu üzerinden doğrulanır ve HttpOnly cookie'de tutulur.
+2. **Kullanıcı girişi:** OwnerAdmin veya TenantAdmin tarafından oluşturulan yerel hesapla giriş yapılır. Kullanıcıya birden fazla tenant atanmışsa şifre doğrulamasından sonra tenant seçimi gösterilir. Yerel oturum yalnız seçilen tenant için geçerlidir.
+
+| Rol | Veri okuma | Panel yazma işlemleri | Yerel kullanıcı yönetimi |
+| --- | --- | --- | --- |
+| `OwnerAdmin` | Tümü | Tümü | Her tenant için `TenantAdmin` ve `TenantUser` |
+| `TenantAdmin` | Aktif tenant | Aktif tenant | Yalnız aktif tenant için `TenantUser` |
+| `TenantUser` | Aktif tenant | Yok | Yok |
+
+Yerel kullanıcı adları sistem genelinde benzersizdir. Şifreler düz metin tutulmaz; `scrypt` ile özetlenir. Kullanıcı–tenant ilişkileri SQLite'taki ayrı üyelik tablosunda saklanır. Varsayılan veritabanı `data/auth.db` dosyasıdır.
+
+### Tenant sekme erişimi
+
+- Aktif tenantı `CL` olan kullanıcılar tüm rapor sekmelerini görür.
+- Yerel `MCC` tenant kullanıcıları MC Panosu sekmesine ve API'sine erişebilir.
+- Yerel kullanıcılar için özel `HDV` tenantı tanımlanabilir; bu tenant HDV Son Durum sekmesine ve API'sine erişir.
+- Yerel kullanıcılar için eşleşmeyen tenant sekmeleri arayüzde gizlenir ve API katmanında `403` ile engellenir.
+
+Kullanıcı yönetiminde aktif tenantı `CL` olan `OwnerAdmin` ve `TenantAdmin`, login akışından gelen tenant listesinden bir tenant seçerek kullanıcı oluşturur. Diğer tenantlarda tenant alanı görünmez; kullanıcı otomatik olarak aktif tenantına atanır. Yerel kullanıcı `CL` tenantına atanamaz.
+
 ## Ortam değişkenleri
 
 Aşağıdakiler ana dashboard ve rapor servislerinde kullanılan değişkenlerdir:
@@ -194,6 +235,12 @@ Aşağıdakiler ana dashboard ve rapor servislerinde kullanılan değişkenlerdi
 | Değişken | Varsayılan | Amaç |
 | --- | --- | --- |
 | `PORT` | `3002` | Web sunucusu portu |
+| `USER_SERVICE_URL` | `https://api.user.awstest.hebiar.com` | CommerceLab auth servisinin kök adresi; farklı ortam için override edin |
+| `USER_SERVICE_APPLICATION_ID` | `MainUI` | Zorunlu `X-Application-ID` değeri |
+| `USER_SERVICE_AUTH_SCHEME` | `Bearer` | Korumalı User Service çağrısının Authorization şeması |
+| `AUTH_DB_PATH` | `data/auth.db` | Yerel kullanıcı ve oturum SQLite dosyası |
+| `AUTH_SESSION_HOURS` | `8` | Yerel oturum süresi |
+| `AUTH_COOKIE_SECURE` | Production'da açık | HTTPS dışında cookie gönderimini engeller |
 | `HEBIAR_BASE_URL` | Kodda tanımlı Hebiar Jira adresi | Hebiar Jira kök adresi |
 | `OLKA_BASE_URL` | Kodda tanımlı Olka Jira adresi | Olka Jira kök adresi |
 | `HEBIAR_WEEKLY_BOARD_ID` | `54` | Weekly board kimliği |
@@ -225,27 +272,26 @@ Rapor servislerinde ek durum, limit ve sprint alanı değişkenleri de bulunur. 
 
 | Güçlü yönler | Zayıf yönler |
 | --- | --- |
-| Çok sayıda operasyonel Jira raporunu tek arayüzde birleştirir. | Otomatik test komutu ve test dosyaları bulunmuyor. |
+| Çok sayıda operasyonel Jira raporunu tek arayüzde birleştirir. | Rapor verilerinde tenant filtresi henüz servis katmanlarına bağlanmamıştır. |
 | Jira REST ve Agile API işlemleri servis katmanlarında ayrılmıştır. | `dashboard.html` arayüz, stil ve istemci kodunu tek büyük dosyada topluyor. |
 | Excel dışa aktarma ve SMTP uyarı desteği vardır. | Bazı Jira adresleri, board/proje değerleri ve alan adları koda özel varsayılanlarla bağlıdır. |
 | Hassas kimlik bilgileri Git dışındaki kullanıcı yapılandırmasında tutulur. | Hata yönetiminde bazı yerlerde genel `500` yanıtıyla ham hata mesajı istemciye aktarılır. |
-| Raporlara özel ortam değişkenleriyle kısmi özelleştirme yapılabilir. | `npm start`, CLI giriş noktasını parametresiz çalıştırır; dashboard için ayrı ve açıklayıcı bir npm scripti yoktur. |
-| Sağlık kontrolü ve Excel raporları operasyonel kullanımı kolaylaştırır. | Dashboard rotaları için uygulama seviyesinde kimlik doğrulama veya yetkilendirme bulunmuyor. |
+| Raporlara özel ortam değişkenleriyle kısmi özelleştirme yapılabilir. | CommerceLab oturumunda her korumalı API isteği User Service üzerinden doğrulandığı için dış servise bağımlılık yüksektir. |
+| Auth API'leri varsayılan-deny yazma politikası ve rol kontrolleriyle korunur. | SQLite dosyasının yedekleme ve çoklu sunucu paylaşım stratejisi tanımlı değildir. |
 
 | Fırsatlar | Tehditler |
 | --- | --- |
-| Giriş noktaları düzeltilip dashboard ve CLI için açık npm scriptleri tanımlanabilir. | Jira API endpoint, pagination veya custom field değişiklikleri raporları bozabilir. |
+| Tenant kapsamı Jira sorgularına bağlanarak veri izolasyonu tamamlanabilir. | Jira API endpoint, pagination veya custom field değişiklikleri raporları bozabilir. |
 | Rapor servisleri için birim ve API rotaları için entegrasyon testleri eklenebilir. | Geniş Jira yetkisine sahip token'ın ele geçirilmesi veri sızıntısı veya yetkisiz değişiklik riski doğurur. |
 | Büyük HTML dosyası modüllere ayrılarak bakım ve ön yüz testleri kolaylaştırılabilir. | Etiket eşitleme ve task oluşturma hatalı kapsamla çalıştırılırsa üretim verisini değiştirebilir. |
 | Jira adresleri, board kimlikleri ve proje kuralları merkezi ve doğrulanan bir yapılandırmaya taşınabilir. | Jira rate limitleri ve ağ kesintileri çok sayfalı raporların tamamlanmasını engelleyebilir. |
-| Rol tabanlı erişim ve işlem kayıtları eklenerek güvenli kurumsal kullanım geliştirilebilir. | Dashboard için uygulama seviyesinde kimlik doğrulama bulunmadığından ağ erişimi olan kullanıcılar yazma rotalarını tetikleyebilir. |
+| Auth işlem kayıtları ve merkezi kullanıcı yaşam döngüsü eklenebilir. | User Service kesintisi CommerceLab oturumlarının doğrulanmasını geçici olarak engeller. |
 
 ## Bilinen sınırlamalar
 
-- `npm start`, `src/index.js` CLI giriş noktasını parametresiz çalıştırır; web dashboard'u başlatmaz. Dashboard için `node src/dashboard.js` veya mevcut PM2 yapılandırmasını kullanın.
-- Projede tanımlı test scripti veya otomatik test paketi yoktur.
+- `req.tenantScope` üretilir ve yerel kullanıcı yönetiminde uygulanır; Jira rapor sorgularına tenant veri filtresi kullanıcı isteği doğrultusunda henüz entegre edilmemiştir. Bu tamamlanana kadar oturum açmış kullanıcılar raporlarda tenantlar arası verileri görebilir.
+- CommerceLab token doğrulaması her korumalı API isteğinde User Service'e bağlıdır; servis erişilemiyorsa istek `502` döner.
 - Bazı raporlar kurum/proje özelindeki `CLLINK`, sprint alanı, status, label, board ve proje varsayımlarına bağlıdır.
-- Dashboard'un kendi kullanıcı oturumu veya yetkilendirme katmanı yoktur; yalnızca güvenilen ağda yayınlanmalıdır.
 
 ## Lisans
 

@@ -40,6 +40,40 @@ function getPriorityColor(priority) {
   return chalk.gray;
 }
 
+function buildIssueListJql(options) {
+  const project = options.project || getConfig().defaultProject;
+  const parts = [];
+  if (project) parts.push(`project = ${project}`);
+  if (options.my || options.assignee === 'me') {
+    parts.push('assignee = currentUser()');
+  } else if (options.assignee) {
+    parts.push(`assignee = "${options.assignee}"`);
+  }
+  if (options.status) parts.push(`status = "${options.status}"`);
+  return parts.length ? `${parts.join(' AND ')} ORDER BY updated DESC` : 'ORDER BY updated DESC';
+}
+
+function renderIssueTable(result) {
+  const table = new Table({
+    head: ['Key', 'Tür', 'Durum', 'Öncelik', 'Atanan', 'Başlık'].map(chalk.white),
+    colWidths: [12, 10, 14, 10, 15, 45],
+    wordWrap: true
+  });
+  result.issues.forEach(issue => {
+    const { fields } = issue;
+    table.push([
+      chalk.cyan(issue.key),
+      fields.issuetype?.name || '-',
+      getStatusColor(fields.status)(fields.status?.name || '-'),
+      getPriorityColor(fields.priority)(fields.priority?.name || '-'),
+      fields.assignee?.displayName?.split(' ')[0] || chalk.gray('—'),
+      fields.summary.substring(0, 42) + (fields.summary.length > 42 ? '...' : '')
+    ]);
+  });
+  console.log(table.toString());
+  console.log();
+}
+
 export const issueCommand = new Command('issue')
   .alias('i')
   .description('Issue (görev) yönetimi');
@@ -185,71 +219,16 @@ issueCommand
   .option('--my', 'Sadece bana atanan issue\'lar', false)
   .action(async (options) => {
     requireConfig();
-    
-    const config = getConfig();
-    const project = options.project || config.defaultProject;
-    
-    // JQL oluştur
-    let jqlParts = [];
-    
-    if (project) {
-      jqlParts.push(`project = ${project}`);
-    }
-    
-    if (options.my || options.assignee === 'me') {
-      jqlParts.push('assignee = currentUser()');
-    } else if (options.assignee) {
-      jqlParts.push(`assignee = "${options.assignee}"`);
-    }
-    
-    if (options.status) {
-      jqlParts.push(`status = "${options.status}"`);
-    }
-    
-    const jql = jqlParts.length > 0 
-      ? jqlParts.join(' AND ') + ' ORDER BY updated DESC'
-      : 'ORDER BY updated DESC';
-    
     const spinner = ora('Issue\'lar yükleniyor...').start();
-    
     try {
-      const result = await jiraClient.searchIssues(jql, parseInt(options.limit));
+      const result = await jiraClient.searchIssues(buildIssueListJql(options), parseInt(options.limit));
       spinner.stop();
-      
       if (result.issues.length === 0) {
         console.log(chalk.yellow('\nHiç issue bulunamadı.'));
         return;
       }
-      
       console.log(chalk.cyan(`\n📋 Issue'lar (${result.issues.length}/${result.total}):\n`));
-      
-      const table = new Table({
-        head: [
-          chalk.white('Key'),
-          chalk.white('Tür'),
-          chalk.white('Durum'),
-          chalk.white('Öncelik'),
-          chalk.white('Atanan'),
-          chalk.white('Başlık')
-        ],
-        colWidths: [12, 10, 14, 10, 15, 45],
-        wordWrap: true
-      });
-      
-      result.issues.forEach(issue => {
-        const { fields } = issue;
-        table.push([
-          chalk.cyan(issue.key),
-          fields.issuetype?.name || '-',
-          getStatusColor(fields.status)(fields.status?.name || '-'),
-          getPriorityColor(fields.priority)(fields.priority?.name || '-'),
-          fields.assignee?.displayName?.split(' ')[0] || chalk.gray('—'),
-          fields.summary.substring(0, 42) + (fields.summary.length > 42 ? '...' : '')
-        ]);
-      });
-      
-      console.log(table.toString());
-      console.log();
+      renderIssueTable(result);
     } catch (error) {
       spinner.fail('Issue\'lar yüklenemedi');
       throw error;
@@ -346,6 +325,47 @@ issueCommand
     }
   });
 
+async function selectAccount(users) {
+  if (users.length === 0) {
+    console.error(chalk.red('✗ Kullanıcı bulunamadı'));
+    return null;
+  }
+  if (users.length === 1) return users[0].accountId;
+  const { selected } = await inquirer.prompt([{
+    type: 'list',
+    name: 'selected',
+    message: 'Kullanıcı seçin:',
+    choices: users.map(user => ({
+      name: `${user.displayName} (${user.emailAddress || user.accountId})`,
+      value: user.accountId
+    }))
+  }]);
+  return selected;
+}
+
+async function resolveAssignee(options) {
+  if (options.me) {
+    const spinner = ora('Kullanıcı bilgisi alınıyor...').start();
+    const user = await jiraClient.getCurrentUser();
+    spinner.stop();
+    return user.accountId;
+  }
+  let query = options.user;
+  if (!query) {
+    const answer = await inquirer.prompt([{
+      type: 'input',
+      name: 'query',
+      message: 'Kullanıcı adı veya email:',
+      validate: input => input ? true : 'Kullanıcı bilgisi gerekli'
+    }]);
+    query = answer.query;
+  }
+  const spinner = ora('Kullanıcılar aranıyor...').start();
+  const users = await jiraClient.searchUsers(query);
+  spinner.stop();
+  return selectAccount(users);
+}
+
 // Issue ata
 issueCommand
   .command('assign <issueKey>')
@@ -354,75 +374,9 @@ issueCommand
   .option('--me', 'Kendime ata')
   .action(async (issueKey, options) => {
     requireConfig();
-    
-    let accountId;
-    
-    if (options.me) {
-      const spinner = ora('Kullanıcı bilgisi alınıyor...').start();
-      const user = await jiraClient.getCurrentUser();
-      accountId = user.accountId;
-      spinner.stop();
-    } else if (options.user) {
-      const spinner = ora('Kullanıcılar aranıyor...').start();
-      const users = await jiraClient.searchUsers(options.user);
-      spinner.stop();
-      
-      if (users.length === 0) {
-        console.error(chalk.red('✗ Kullanıcı bulunamadı'));
-        return;
-      }
-      
-      if (users.length === 1) {
-        accountId = users[0].accountId;
-      } else {
-        const { selected } = await inquirer.prompt([
-          {
-            type: 'list',
-            name: 'selected',
-            message: 'Kullanıcı seçin:',
-            choices: users.map(u => ({ 
-              name: `${u.displayName} (${u.emailAddress || u.accountId})`, 
-              value: u.accountId 
-            }))
-          }
-        ]);
-        accountId = selected;
-      }
-    } else {
-      const { query } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'query',
-          message: 'Kullanıcı adı veya email:',
-          validate: input => input ? true : 'Kullanıcı bilgisi gerekli'
-        }
-      ]);
-      
-      const spinner = ora('Kullanıcılar aranıyor...').start();
-      const users = await jiraClient.searchUsers(query);
-      spinner.stop();
-      
-      if (users.length === 0) {
-        console.error(chalk.red('✗ Kullanıcı bulunamadı'));
-        return;
-      }
-      
-      const { selected } = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'selected',
-          message: 'Kullanıcı seçin:',
-          choices: users.map(u => ({ 
-            name: `${u.displayName} (${u.emailAddress || u.accountId})`, 
-            value: u.accountId 
-          }))
-        }
-      ]);
-      accountId = selected;
-    }
-    
+    const accountId = await resolveAssignee(options);
+    if (!accountId) return;
     const spinner = ora('Issue atanıyor...').start();
-    
     try {
       await jiraClient.assignIssue(issueKey, accountId);
       spinner.succeed(chalk.green('Issue atandı'));

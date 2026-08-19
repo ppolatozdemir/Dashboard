@@ -42,6 +42,95 @@ function normName(s) {
     .trim();
 }
 
+const HDV_COLUMNS = [
+  { header: "Task No", key: "key", width: 15 },
+  { header: "Task Özeti", key: "summary", width: 60 },
+  { header: "Atanan Kişi", key: "assignee", width: 24 },
+  { header: "Sprint", key: "sprint", width: 20 },
+  { header: "Task Durumu", key: "statusName", width: 18 },
+  { header: "Reporter", key: "reporter", width: 24 },
+];
+const HDV_COLORS = {
+  navy: "FF1E3A8A",
+  header: "FF2E5AAC",
+  zebra: "FFEAF0FA",
+  border: "FFD5DEEF",
+};
+
+function styleHdvReportHeader(worksheet, rows) {
+  worksheet.mergeCells("A1:F1");
+  const titleCell = worksheet.getCell("A1");
+  titleCell.value = "HDV Son Durum — Açık (Tamamlanmamış) Tasklar";
+  titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
+  titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HDV_COLORS.navy } };
+  worksheet.getRow(1).height = 30;
+
+  worksheet.mergeCells("A2:F2");
+  const statsCell = worksheet.getCell("A2");
+  statsCell.value = `Proje: HDV      |      Toplam: ${rows.length}      |      Oluşturulma: ${new Date().toLocaleString("tr-TR")}`;
+  statsCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
+  statsCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+  statsCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE9EFFA" } };
+  worksheet.getRow(2).height = 18;
+}
+
+function styleHdvColumnHeader(worksheet) {
+  const headerRow = worksheet.getRow(3);
+  HDV_COLUMNS.forEach((column, index) => {
+    const cell = headerRow.getCell(index + 1);
+    cell.value = column.header;
+    cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HDV_COLORS.header } };
+    cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    cell.border = {
+      top: { style: "thin", color: { argb: HDV_COLORS.border } },
+      left: { style: "thin", color: { argb: HDV_COLORS.border } },
+      bottom: { style: "medium", color: { argb: HDV_COLORS.navy } },
+      right: { style: "thin", color: { argb: HDV_COLORS.border } },
+    };
+  });
+  headerRow.height = 24;
+}
+
+function styleHdvDataCell(cell, column, zebra) {
+  cell.border = {
+    top: { style: "hair", color: { argb: HDV_COLORS.border } },
+    left: { style: "hair", color: { argb: HDV_COLORS.border } },
+    bottom: { style: "hair", color: { argb: HDV_COLORS.border } },
+    right: { style: "hair", color: { argb: HDV_COLORS.border } },
+  };
+  cell.alignment = {
+    vertical: "middle",
+    horizontal: column === 2 ? "left" : "center",
+    wrapText: column === 2,
+  };
+  if (zebra) {
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HDV_COLORS.zebra } };
+  }
+}
+
+function addHdvDataRow(worksheet, item, index) {
+  const row = worksheet.getRow(index + 4);
+  const taskCell = row.getCell(1);
+  taskCell.value = item.key
+    ? { text: item.key, hyperlink: `${HEBIAR_BASE_URL}/browse/${item.key}` }
+    : "";
+  taskCell.font = { color: { argb: "FF1155CC" }, underline: true, bold: true };
+  row.getCell(2).value = item.summary || "";
+  row.getCell(3).value = item.assignee || "Atanmamış";
+  row.getCell(4).value = item.sprint || "—";
+  row.getCell(5).value = item.statusName || "—";
+  row.getCell(6).value = item.reporter || "—";
+  if (!item.assignee) row.getCell(3).font = { color: { argb: "FFAAAAAA" }, italic: true };
+  if (!item.sprint) row.getCell(4).font = { color: { argb: "FFAAAAAA" } };
+  if (!item.reporter) row.getCell(6).font = { color: { argb: "FFAAAAAA" } };
+  for (let column = 1; column <= HDV_COLUMNS.length; column++) {
+    styleHdvDataCell(row.getCell(column), column, index % 2 === 1);
+  }
+  row.height = 18;
+}
+
 class HdvStatusReportService {
   getAuthHeader() {
     const { email, apiToken } = getConfig();
@@ -182,7 +271,29 @@ class HdvStatusReportService {
     const SPRINT_FIELD = "customfield_10020";
     const fields = ["summary", "status", "assignee", SPRINT_FIELD, "reporter"];
     const allowedSet = new Set(ALLOWED_ASSIGNEES.map(normName));
+    const issues = await this._fetchAllowedIssues(fields);
+    const rows = issues
+      .map((issue) => this._mapStatusIssue(issue, SPRINT_FIELD))
+      .filter((row) => row.assignee && allowedSet.has(normName(row.assignee)));
+    rows.sort((a, b) => {
+      const comparison = (a.assignee || "").localeCompare(
+        b.assignee || "",
+        "tr",
+      );
+      if (comparison !== 0) return comparison;
+      return (b.key || "").localeCompare(a.key || "", "tr", { numeric: true });
+    });
+    return {
+      generatedAt: new Date().toISOString(),
+      project: PROJECT,
+      allowedAssignees: ALLOWED_ASSIGNEES,
+      people: this._summarizeAssignees(rows),
+      rows,
+      count: rows.length,
+    };
+  }
 
+  async _fetchAllowedIssues(fields) {
     let accountMap = new Map();
     try {
       accountMap = await this._resolveAccountIds();
@@ -209,49 +320,34 @@ class HdvStatusReportService {
       const jql = `project = ${PROJECT} AND assignee is not EMPTY AND statusCategory != Done ORDER BY assignee ASC, key DESC`;
       issues = await this._searchAllJql(jql, fields);
     }
+    return issues;
+  }
 
-    const rows = issues
-      .map((issue) => {
-        const f = issue.fields || {};
-        return {
-          key: issue.key,
-          summary: f.summary || "",
-          assignee: f.assignee ? f.assignee.displayName : null,
-          sprint: this.extractSprint(f[SPRINT_FIELD]),
-          statusName: f.status ? f.status.name : null,
-          statusCategory: f.status?.statusCategory?.key || null,
-          reporter: f.reporter ? f.reporter.displayName : null,
-        };
-      })
-      // Güvenlik süzgeci: yalnızca izin verilen kişiler.
-      .filter((r) => r.assignee && allowedSet.has(normName(r.assignee)));
+  _mapStatusIssue(issue, sprintField) {
+    const fields = issue.fields || {};
+    return {
+      key: issue.key,
+      summary: fields.summary || "",
+      assignee: fields.assignee ? fields.assignee.displayName : null,
+      sprint: this.extractSprint(fields[sprintField]),
+      statusName: fields.status ? fields.status.name : null,
+      statusCategory: fields.status?.statusCategory?.key || null,
+      reporter: fields.reporter ? fields.reporter.displayName : null,
+    };
+  }
 
-    // Atanan kişi (Türkçe) -> key azalan (yeni task üstte) sıralaması.
-    rows.sort((a, b) => {
-      const c = (a.assignee || "").localeCompare(b.assignee || "", "tr");
-      if (c !== 0) return c;
-      return (b.key || "").localeCompare(a.key || "", "tr", { numeric: true });
-    });
-
-    // Kişi bazlı özet (izin verilen sırayla, 0 olanlar da görünür).
+  _summarizeAssignees(rows) {
     const countByName = new Map(ALLOWED_ASSIGNEES.map((n) => [normName(n), 0]));
-    for (const r of rows) {
-      const k = normName(r.assignee);
-      if (countByName.has(k)) countByName.set(k, countByName.get(k) + 1);
+    for (const row of rows) {
+      const key = normName(row.assignee);
+      if (countByName.has(key)) {
+        countByName.set(key, countByName.get(key) + 1);
+      }
     }
-    const people = ALLOWED_ASSIGNEES.map((name) => ({
+    return ALLOWED_ASSIGNEES.map((name) => ({
       name,
       count: countByName.get(normName(name)) || 0,
     }));
-
-    return {
-      generatedAt: new Date().toISOString(),
-      project: PROJECT,
-      allowedAssignees: ALLOWED_ASSIGNEES,
-      people,
-      rows,
-      count: rows.length,
-    };
   }
 
   /**
@@ -261,144 +357,24 @@ class HdvStatusReportService {
    */
   async buildHdvStatusXlsxBuffer(rows = [], meta = {}) {
     const ExcelJS = (await import("exceljs")).default;
-
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "PolatAi Dashboard";
     workbook.created = new Date();
-
-    const ws = workbook.addWorksheet("HDV Son Durum", {
+    const worksheet = workbook.addWorksheet("HDV Son Durum", {
       views: [{ state: "frozen", ySplit: 3 }],
       pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1 },
     });
-
-    const columns = [
-      { header: "Task No", key: "key", width: 15 },
-      { header: "Task Özeti", key: "summary", width: 60 },
-      { header: "Atanan Kişi", key: "assignee", width: 24 },
-      { header: "Sprint", key: "sprint", width: 20 },
-      { header: "Task Durumu", key: "statusName", width: 18 },
-      { header: "Reporter", key: "reporter", width: 24 },
-    ];
-    ws.columns = columns.map((c) => ({ key: c.key, width: c.width }));
-
-    const LAST_COL = "F";
-    const COL_COUNT = columns.length;
-    const NAVY = "FF1E3A8A";
-    const HEADER = "FF2E5AAC";
-    const ZEBRA = "FFEAF0FA";
-    const BORDER = "FFD5DEEF";
-
-    // 1. satır: Başlık
-    ws.mergeCells(`A1:${LAST_COL}1`);
-    const titleCell = ws.getCell("A1");
-    titleCell.value = "HDV Son Durum — Açık (Tamamlanmamış) Tasklar";
-    titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-    titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
-    titleCell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: NAVY },
-    };
-    ws.getRow(1).height = 30;
-
-    // 2. satır: Özet + tarih
-    ws.mergeCells(`A2:${LAST_COL}2`);
-    const statsCell = ws.getCell("A2");
-    statsCell.value = `Proje: HDV      |      Toplam: ${rows.length}      |      Oluşturulma: ${new Date().toLocaleString("tr-TR")}`;
-    statsCell.font = { italic: true, size: 10, color: { argb: "FF6B7280" } };
-    statsCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
-    statsCell.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFE9EFFA" },
-    };
-    ws.getRow(2).height = 18;
-
-    // 3. satır: Kolon başlıkları
-    const headerRow = ws.getRow(3);
-    columns.forEach((c, i) => {
-      const cell = headerRow.getCell(i + 1);
-      cell.value = c.header;
-      cell.font = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: HEADER },
-      };
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: "center",
-        wrapText: true,
-      };
-      cell.border = {
-        top: { style: "thin", color: { argb: BORDER } },
-        left: { style: "thin", color: { argb: BORDER } },
-        bottom: { style: "medium", color: { argb: NAVY } },
-        right: { style: "thin", color: { argb: BORDER } },
-      };
-    });
-    headerRow.height = 24;
-
-    // Veri satırları
-    let rowIdx = 4;
-    rows.forEach((r, i) => {
-      const row = ws.getRow(rowIdx);
-      const zebra = i % 2 === 1;
-
-      const c1 = row.getCell(1);
-      c1.value = r.key
-        ? { text: r.key, hyperlink: `${HEBIAR_BASE_URL}/browse/${r.key}` }
-        : "";
-      c1.font = { color: { argb: "FF1155CC" }, underline: true, bold: true };
-
-      row.getCell(2).value = r.summary || "";
-
-      const c3 = row.getCell(3);
-      c3.value = r.assignee || "Atanmamış";
-      if (!r.assignee) c3.font = { color: { argb: "FFAAAAAA" }, italic: true };
-
-      const c4 = row.getCell(4);
-      c4.value = r.sprint || "—";
-      if (!r.sprint) c4.font = { color: { argb: "FFAAAAAA" } };
-
-      row.getCell(5).value = r.statusName || "—";
-
-      const c6 = row.getCell(6);
-      c6.value = r.reporter || "—";
-      if (!r.reporter) c6.font = { color: { argb: "FFAAAAAA" } };
-
-      for (let col = 1; col <= COL_COUNT; col++) {
-        const cell = row.getCell(col);
-        cell.border = {
-          top: { style: "hair", color: { argb: BORDER } },
-          left: { style: "hair", color: { argb: BORDER } },
-          bottom: { style: "hair", color: { argb: BORDER } },
-          right: { style: "hair", color: { argb: BORDER } },
-        };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: col === 2 ? "left" : "center",
-          wrapText: col === 2,
-        };
-        if (zebra) {
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: { argb: ZEBRA },
-          };
-        }
-      }
-
-      row.height = 18;
-      rowIdx++;
-    });
-
-    // Başlık satırına filtre (kişi/statü Excel'de de filtrelenebilir)
-    ws.autoFilter = {
+    worksheet.columns = HDV_COLUMNS.map((column) => ({
+      key: column.key,
+      width: column.width,
+    }));
+    styleHdvReportHeader(worksheet, rows);
+    styleHdvColumnHeader(worksheet);
+    rows.forEach((item, index) => addHdvDataRow(worksheet, item, index));
+    worksheet.autoFilter = {
       from: { row: 3, column: 1 },
-      to: { row: 3, column: COL_COUNT },
+      to: { row: 3, column: HDV_COLUMNS.length },
     };
-
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
   }

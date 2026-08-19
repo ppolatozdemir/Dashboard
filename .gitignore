@@ -11,6 +11,10 @@ node_modules/
 .env
 .env.*
 
+# Local auth database
+data/*.db
+data/*.db-*
+
 # OS files
 .DS_Store
 Thumbs.db

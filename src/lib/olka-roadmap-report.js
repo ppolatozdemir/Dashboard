@@ -332,52 +332,89 @@ class OlkaRoadmapReportService {
       SPRINT_FIELD,
     ]);
 
-    let sprints = [];
-    try {
-      sprints = await this.getSprints();
-    } catch (e) {
-      sprints = [];
-    }
+    const sprints = await this._safeGetSprints();
+    const collected = this._collectRoadmapItems(issues, defaultYear);
+    const summary = this._summarizeRoadmap(collected);
+    const report = {
+      project: ROADMAP_PROJECT,
+      baseUrl: HEBIAR_BASE_URL,
+      generatedAt: new Date().toISOString(),
+      defaultYear,
+      totalProjectItems: collected.items.length,
+      ...summary,
+      sprints,
+      items: collected.items,
+      count: collected.items.length,
+    };
+    this._cache = report;
+    this._cacheAt = now;
+    return report;
+  }
 
+  async _safeGetSprints() {
+    try {
+      return await this.getSprints();
+    } catch (error) {
+      return [];
+    }
+  }
+
+  _collectRoadmapItems(issues, defaultYear) {
     const items = [];
-    const monthMap = new Map(); // monthKey -> {year, month, count, completed}
+    const monthMap = new Map();
     const yearsSet = new Set();
     let excludedCount = 0;
+    for (const issue of issues) {
+      const { row, bucket } = this._mapRoadmapIssue(issue, defaultYear);
+      items.push(row);
+      if (row.isRoadmap && bucket) {
+        yearsSet.add(bucket.year);
+        if (!row.excluded) {
+          const current = monthMap.get(row.monthKey) || {
+            monthKey: row.monthKey,
+            year: bucket.year,
+            month: bucket.monthIdx,
+            label: `${MONTH_LABEL_TR(bucket.monthIdx)} ${bucket.year}`,
+            count: 0,
+            completed: 0,
+          };
+          current.count += 1;
+          if (row.completed) current.completed += 1;
+          monthMap.set(row.monthKey, current);
+        } else {
+          excludedCount += 1;
+        }
+      }
+    }
+    return { items, monthMap, yearsSet, excludedCount };
+  }
 
-    for (const it of issues) {
-      const f = it.fields || {};
-      const labels = f.labels || [];
-      const monthBucket = this._chooseBucket(labels, f, defaultYear);
-      const hasStrategy = this._hasStrategyLabel(labels);
-      const isRoadmap = !!monthBucket || hasStrategy;
-
-      // Roadmap kovası: ay etiketi varsa ondan; yoksa (strateji etiketli madde)
-      // oluşturulma tarihinden türetilir ki dönem görünümlerinde de yer alsın.
-      const bucket =
-        monthBucket ||
-        (isRoadmap ? this._bucketFromDate(f.created, defaultYear) : null);
-
-      const statusName = f.status ? f.status.name : "";
-      const statusCategoryKey =
-        f.status && f.status.statusCategory
-          ? f.status.statusCategory.key
-          : null;
-      const excluded = this.isExcluded(statusName);
-      const completed =
-        !excluded && this.isCompleted(statusName, statusCategoryKey);
-
-      const monthKey = bucket
-        ? `${bucket.year}-${String(bucket.monthIdx).padStart(2, "0")}`
-        : null;
-
-      const row = {
-        key: it.key,
-        summary: f.summary || "",
-        assignee: f.assignee ? f.assignee.displayName : "Atanmamış",
+  _mapRoadmapIssue(issue, defaultYear) {
+    const fields = issue.fields || {};
+    const labels = fields.labels || [];
+    const monthBucket = this._chooseBucket(labels, fields, defaultYear);
+    const isRoadmap = Boolean(monthBucket) || this._hasStrategyLabel(labels);
+    const bucket =
+      monthBucket ||
+      (isRoadmap ? this._bucketFromDate(fields.created, defaultYear) : null);
+    const statusName = fields.status ? fields.status.name : "";
+    const statusCategory = fields.status?.statusCategory
+      ? fields.status.statusCategory.key
+      : null;
+    const excluded = this.isExcluded(statusName);
+    const monthKey = bucket
+      ? `${bucket.year}-${String(bucket.monthIdx).padStart(2, "0")}`
+      : null;
+    return {
+      bucket,
+      row: {
+        key: issue.key,
+        summary: fields.summary || "",
+        assignee: fields.assignee ? fields.assignee.displayName : "Atanmamış",
         status: statusName,
-        statusCategory: statusCategoryKey,
-        issueType: f.issuetype ? f.issuetype.name : "",
-        priority: f.priority ? f.priority.name : "",
+        statusCategory,
+        issueType: fields.issuetype ? fields.issuetype.name : "",
+        priority: fields.priority ? fields.priority.name : "",
         labels,
         isRoadmap,
         year: bucket ? bucket.year : null,
@@ -386,61 +423,36 @@ class OlkaRoadmapReportService {
         monthLabel: bucket
           ? `${MONTH_LABEL_TR(bucket.monthIdx)} ${bucket.year}`
           : null,
-        completed,
+        completed: !excluded && this.isCompleted(statusName, statusCategory),
         excluded,
-        sprints: this._parseSprints(f[SPRINT_FIELD]),
-        resolutiondate: f.resolutiondate || null,
-        duedate: f.duedate || null,
-        created: f.created || null,
-        updated: f.updated || null,
-      };
-      items.push(row);
+        sprints: this._parseSprints(fields[SPRINT_FIELD]),
+        resolutiondate: fields.resolutiondate || null,
+        duedate: fields.duedate || null,
+        created: fields.created || null,
+        updated: fields.updated || null,
+      },
+    };
+  }
 
-      // Aylık kırılım + yıl listesi YALNIZCA roadmap (ay-kovalı) maddelerden.
-      if (isRoadmap && bucket) {
-        yearsSet.add(bucket.year);
-        if (!excluded) {
-          const cur = monthMap.get(monthKey) || {
-            monthKey,
-            year: bucket.year,
-            month: bucket.monthIdx,
-            label: `${MONTH_LABEL_TR(bucket.monthIdx)} ${bucket.year}`,
-            count: 0,
-            completed: 0,
-          };
-          cur.count += 1;
-          if (completed) cur.completed += 1;
-          monthMap.set(monthKey, cur);
-        } else {
-          excludedCount += 1;
-        }
-      }
-    }
-
+  _summarizeRoadmap({ items, monthMap, yearsSet, excludedCount }) {
     const months = [...monthMap.values()]
-      .map((m) => ({
-        ...m,
-        remaining: m.count - m.completed,
+      .map((month) => ({
+        ...month,
+        remaining: month.count - month.completed,
         completionRate:
-          m.count > 0 ? Math.round((m.completed / m.count) * 1000) / 10 : 0,
+          month.count > 0
+            ? Math.round((month.completed / month.count) * 1000) / 10
+            : 0,
       }))
       .sort((a, b) => a.year * 12 + a.month - (b.year * 12 + b.month));
-
     const years = [...yearsSet].sort((a, b) => a - b);
-
     const totalRoadmapItems = items.filter(
-      (r) => r.isRoadmap && !r.excluded,
+      (row) => row.isRoadmap && !row.excluded,
     ).length;
     const totalCompleted = items.filter(
-      (r) => r.isRoadmap && !r.excluded && r.completed,
+      (row) => row.isRoadmap && !row.excluded && row.completed,
     ).length;
-
-    const report = {
-      project: ROADMAP_PROJECT,
-      baseUrl: HEBIAR_BASE_URL,
-      generatedAt: new Date().toISOString(),
-      defaultYear,
-      totalProjectItems: items.length,
+    return {
       totalRoadmapItems,
       totalCompleted,
       totalRemaining: totalRoadmapItems - totalCompleted,
@@ -451,14 +463,7 @@ class OlkaRoadmapReportService {
       excludedCount,
       months,
       years,
-      sprints,
-      items,
-      count: items.length,
     };
-
-    this._cache = report;
-    this._cacheAt = now;
-    return report;
   }
 
   /**

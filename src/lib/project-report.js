@@ -188,37 +188,9 @@ class ProjectReportService {
       "status",
     ]);
 
-    const map = new Map();
-    for (const it of issues) {
-      const f = it.fields || {};
-      const p = f.project || null;
-      const key = p ? p.key : "—";
-      const name = p ? p.name : "Bilinmiyor";
-      const statusName = f.status ? f.status.name : "";
-      const statusCategoryKey =
-        f.status && f.status.statusCategory
-          ? f.status.statusCategory.key
-          : null;
-      const done = this.isCompleted(statusName, statusCategoryKey);
-
-      const cur = map.get(key) || { key, name, count: 0, completed: 0 };
-      cur.count += 1;
-      if (done) cur.completed += 1;
-      map.set(key, cur);
-    }
-
+    const map = this._groupProjects(issues);
     const total = issues.length;
     const completed = [...map.values()].reduce((a, p) => a + p.completed, 0);
-    const projects = [...map.values()]
-      .map((p) => ({
-        ...p,
-        remaining: p.count - p.completed,
-        percentage: total > 0 ? Math.round((p.count / total) * 1000) / 10 : 0,
-        completionRate:
-          p.count > 0 ? Math.round((p.completed / p.count) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
-
     return {
       sprint: {
         id: target.id,
@@ -234,8 +206,45 @@ class ProjectReportService {
       remaining: total - completed,
       completionRate:
         total > 0 ? Math.round((completed / total) * 1000) / 10 : 0,
-      projects,
+      projects: this._projectPercentages(map, total),
     };
+  }
+
+  _groupProjects(issues) {
+    const projects = new Map();
+    for (const issue of issues) {
+      const fields = issue.fields || {};
+      const project = fields.project || null;
+      const key = project ? project.key : "—";
+      const name = project ? project.name : "Bilinmiyor";
+      const statusName = fields.status ? fields.status.name : "";
+      const category = fields.status?.statusCategory?.key || null;
+      const current = projects.get(key) || {
+        key,
+        name,
+        count: 0,
+        completed: 0,
+      };
+      current.count += 1;
+      if (this.isCompleted(statusName, category)) current.completed += 1;
+      projects.set(key, current);
+    }
+    return projects;
+  }
+
+  _projectPercentages(projectMap, total) {
+    return [...projectMap.values()]
+      .map((project) => ({
+        ...project,
+        remaining: project.count - project.completed,
+        percentage:
+          total > 0 ? Math.round((project.count / total) * 1000) / 10 : 0,
+        completionRate:
+          project.count > 0
+            ? Math.round((project.completed / project.count) * 1000) / 10
+            : 0,
+      }))
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
   }
 
   /**

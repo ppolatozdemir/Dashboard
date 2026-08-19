@@ -1,0 +1,127 @@
+/* Proje Raporu (sprint bazlı) */
+.pr-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+.pr-summary > span {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+}
+.pr-summary-sprint { color: var(--accent-blue); }
+.pr-layout {
+    display: grid;
+    grid-template-columns: minmax(340px, 1.2fr) minmax(300px, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+@media (max-width: 900px) {
+    .pr-layout { grid-template-columns: 1fr; }
+}
+.pr-table-wrap { overflow-x: auto; }
+.pr-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.pr-table th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--text-muted);
+    padding: 10px 12px;
+    border-bottom: 2px solid var(--border-color);
+}
+.pr-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 14px;
+    vertical-align: middle;
+}
+.pr-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+.pr-key {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    padding: 1px 7px;
+    border-radius: 6px;
+}
+.pr-count {
+    display: inline-block;
+    min-width: 34px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    background: rgba(67, 97, 238, 0.18);
+    color: var(--accent-blue);
+    font-weight: 700;
+}
+.pr-done {
+    display: inline-block;
+    min-width: 30px;
+    padding: 3px 9px;
+    border-radius: 12px;
+    background: rgba(45, 150, 0, 0.18);
+    color: var(--accent-green);
+    font-weight: 700;
+}
+.pr-done-rate {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+.pr-bar-wrap {
+    position: relative;
+    height: 20px;
+    background: var(--card-bg);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+.pr-bar {
+    height: 100%;
+    border-radius: 10px 0 0 10px;
+    min-width: 2px;
+    transition: width 0.4s ease;
+}
+.pr-bar-label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    line-height: 20px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    text-shadow: 0 0 3px var(--bg-secondary);
+}
+.pr-total-row td {
+    border-top: 2px solid var(--accent-blue);
+    border-bottom: none;
+    font-size: 15px;
+}
+.pr-chart-wrap {
+    position: relative;
+    min-height: 340px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 18px;
+}
