@@ -14,7 +14,11 @@
         HD: 'HD',
         OLKA: 'Olka'
     });
-    const olkaTenants = new Set(['OLKA', 'SKC', 'SKCP', 'ASC', 'BRR', 'HFV', 'HTR', 'KLD']);
+    const dashboardTabs = [
+        'daily', 'closed', 'unsprinted', 'olkaDeploy', 'rfr', 'reject',
+        'hdvStatus', 'olkaSprint', 'olkaRoadmap', 'labelSync', 'mcBoard',
+        'project', 'createTask'
+    ];
     const hideLoginOverlayDuringTenantSwitch =
         sessionStorage.getItem('dashboard-tenant-switch') === 'true';
 
@@ -195,19 +199,14 @@
         `);
         document.getElementById('authLogout').addEventListener('click', logout);
         document.getElementById('authTenantSwitch')?.addEventListener('change', switchTenant);
-        if (user.tenant !== 'CL' && user.tenant !== 'MCC') {
-            hideTab('tabMcBoard', 'mcBoardTabContent');
-        }
-        if (user.tenant !== 'CL' && user.tenant !== 'HD' && user.tenant !== 'HDV') {
-            hideTab('tabHdvStatus', 'hdvStatusTabContent');
-        }
-        if (user.tenant !== 'CL' && !olkaTenants.has(user.tenant)) {
-            hideTab('tabUnsprinted', 'unsprintedTabContent');
-            hideTab('tabOlkaDeploy', 'olkaDeployTabContent');
-            hideTab('tabOlkaSprint', 'olkaSprintTabContent');
-            hideTab('tabOlkaRoadmap', 'olkaRoadmapTabContent');
-            hideTab('tabLabelSync', 'labelSyncTabContent');
-        }
+        const allowedPages = new Set(user.allowedPages || []);
+        window.dashboardAllowedTabs = dashboardTabs.filter(tab => allowedPages.has(tab));
+        dashboardTabs
+            .filter(tab => !allowedPages.has(tab))
+            .forEach(tab => {
+                const pascalName = tab.charAt(0).toUpperCase() + tab.slice(1);
+                hideTab(`tab${pascalName}`, `${tab}TabContent`);
+            });
         if (user.role === 'OwnerAdmin' || user.role === 'TenantAdmin') {
             injectUserManagement();
         }

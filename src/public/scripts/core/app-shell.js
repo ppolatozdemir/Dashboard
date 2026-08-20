@@ -75,8 +75,8 @@ const DASHBOARD_TABS = [
 function updateActiveTab(tab) {
     DASHBOARD_TABS.forEach(name => {
         const pascalName = name.charAt(0).toUpperCase() + name.slice(1);
-        document.getElementById(`tab${pascalName}`).classList.toggle('active', name === tab);
-        document.getElementById(`${name}TabContent`).classList.toggle('active', name === tab);
+        document.getElementById(`tab${pascalName}`)?.classList.toggle('active', name === tab);
+        document.getElementById(`${name}TabContent`)?.classList.toggle('active', name === tab);
     });
 }
 
@@ -113,11 +113,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const authenticated = await window.authReady;
     if (!authenticated) return;
 
+    const initialTab = window.dashboardAllowedTabs?.[0];
+    if (!initialTab) return;
+    updateActiveTab(initialTab);
+
     // Günlük kapanan raporu için tarih ayarla
     document.getElementById('closedReportDate').value = new Date().toISOString().split('T')[0];
-    
-    // Günlük raporu yükle
-    await loadDailyReport();
+    if (initialTab === 'daily') {
+        await loadDailyReport();
+    } else {
+        loadTabContent(initialTab);
+    }
 });
 
 // Rapor ekran görüntüsü alma (yüksek çözünürlüklü - WhatsApp paylaşımı için)

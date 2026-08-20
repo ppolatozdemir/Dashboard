@@ -1,6 +1,7 @@
 import authService from "../../auth/service.js";
 import {
   COMPANY_LOGIN_TENANTS,
+  getAccessiblePages,
   getCompanyLoginTenant,
   getCompanyTenantOptions,
 } from "../../auth/constants.js";
@@ -143,7 +144,12 @@ export function logout(req, res) {
 }
 
 export function currentUser(req, res) {
-  res.json({ user: req.auth });
+  res.json({
+    user: {
+      ...req.auth,
+      allowedPages: getAccessiblePages(req.auth),
+    },
+  });
 }
 
 export function switchTenant(req, res) {

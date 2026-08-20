@@ -2,7 +2,9 @@ import path from "path";
 import { randomBytes, randomUUID } from "crypto";
 import { UserServiceClient } from "./client.js";
 import {
+  GLOBAL_ACCESS_TENANT,
   getCompanyTenantScopes,
+  hasPageAccess,
   ROLES,
 } from "./constants.js";
 import { parseCookies } from "./cookies.js";
@@ -306,7 +308,7 @@ export class AuthService {
       id: user.id,
       username: user.username,
       displayName: user.display_name,
-      role: user.role,
+      role: ROLES.TENANT_ADMIN,
       tenant,
       source: "local",
       tenantScope: tenant,
@@ -347,11 +349,13 @@ export class AuthService {
     if (session) {
       identity.allowedTenants = session.tenants;
       identity.tenant = session.activeTenant || identity.tenant;
-      identity.tenantScope =
-        identity.role === ROLES.OWNER_ADMIN ? null : identity.tenant;
     } else {
       identity.allowedTenants = [identity.tenant].filter(Boolean);
     }
+    identity.tenantScope =
+      normalizeTenant(identity.tenant) === GLOBAL_ACCESS_TENANT
+        ? null
+        : identity.tenant;
     return identity;
   }
 
@@ -382,6 +386,13 @@ export class AuthService {
     }
     return res.status(403).json({
       error: `${tenant} tenantı için erişim yetkiniz yok`,
+    });
+  };
+
+  requirePageAccess = (page) => (req, res, next) => {
+    if (hasPageAccess(req.auth, page)) return next();
+    return res.status(403).json({
+      error: "Bu sayfaya erişim yetkiniz yok",
     });
   };
 

@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import authService from "../auth/service.js";
+import { PAGES } from "../auth/constants.js";
 import { requireApiWriteAccess } from "./middleware/authorization.js";
 import {
   registerProtectedAuthRoutes,
@@ -31,8 +32,27 @@ function registerStaticAssets(app) {
 
 function registerAuthorization(app) {
   app.use("/api", authService.requireAuth);
-  app.use("/api/mc-board", authService.requireTenantAccess("MCC"));
-  app.use("/api/hdv-status", authService.requireTenantAccess("HDV"));
+  const pageRoutes = [
+    ["/api/daily-report", PAGES.DAILY],
+    ["/api/daily-closed", PAGES.CLOSED],
+    ["/api/unsprinted", PAGES.UNSPRINTED],
+    ["/api/olka-deploy", PAGES.OLKA_DEPLOY],
+    ["/api/rfr", PAGES.RFR],
+    ["/api/reject", PAGES.REJECT],
+    ["/api/hdv-status", PAGES.HDV_STATUS],
+    ["/api/olka-sprint", PAGES.OLKA_SPRINT],
+    ["/api/olka-roadmap", PAGES.OLKA_ROADMAP],
+    ["/api/label-sync", PAGES.LABEL_SYNC],
+    ["/api/mc-board", PAGES.PROJECT_BOARD],
+    ["/api/project-report", PAGES.PROJECT_REPORT],
+    ["/api/create-task", PAGES.CREATE_TASK],
+    ["/api/projects", PAGES.CREATE_TASK],
+    ["/api/all-sprints", PAGES.CREATE_TASK],
+    ["/api/users", PAGES.CREATE_TASK],
+  ];
+  pageRoutes.forEach(([route, page]) => {
+    app.use(route, authService.requirePageAccess(page));
+  });
   app.use("/api", requireApiWriteAccess);
 }
 
