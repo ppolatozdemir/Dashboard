@@ -37,7 +37,12 @@ export function getCompanyLoginTenant(tenant, availableTenants = []) {
   const scopes = COMPANY_TENANT_SCOPES[tenant] || [tenant];
   if (availableTenants.length === 0) return scopes[0];
   const available = new Set(availableTenants.map(normalizeCompanyTenant));
-  return scopes.find((scope) => available.has(scope)) || null;
+  const matchingScope = scopes.find((scope) => available.has(scope));
+  if (matchingScope) return matchingScope;
+  if (tenant === "HD") {
+    return available.has("CL") ? "CL" : [...available][0] || null;
+  }
+  return null;
 }
 
 export function getCompanyTenantScopes(tenant) {
@@ -48,6 +53,7 @@ export function getCompanyTenantOptions(availableTenants) {
   const available = new Set(availableTenants.map(normalizeCompanyTenant));
   return COMPANY_LOGIN_TENANTS.filter(
     (tenant) =>
+      tenant === "HD" ||
       available.has(tenant) ||
       COMPANY_TENANT_SCOPES[tenant].some((scope) => available.has(scope)),
   );
