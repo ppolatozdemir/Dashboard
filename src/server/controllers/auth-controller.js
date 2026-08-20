@@ -1,4 +1,5 @@
 import authService from "../../auth/service.js";
+import { COMPANY_LOGIN_TENANTS } from "../../auth/constants.js";
 import { normalizeTenant } from "../../auth/normalization.js";
 
 function tenantSelectionResponse(res, result) {
@@ -54,6 +55,11 @@ function completeCompanyLogin(res, result, context, maxAge) {
 export async function companyLogin(req, res) {
   try {
     const result = await authService.companyLogin(req.body || {});
+    if (!req.body?.tenant) {
+      return tenantSelectionResponse(res, {
+        tenants: COMPANY_LOGIN_TENANTS,
+      });
+    }
     if (result.kind === "tenant") return tenantSelectionResponse(res, result);
     const expiry = new Date(result.identity.expiresAt || 0).getTime();
     const maxAge = Math.max(0, expiry - Date.now());

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AuthService, ROLES } from "../src/lib/auth-service.js";
+import { COMPANY_LOGIN_TENANTS } from "../src/auth/constants.js";
 
 const owner = {
   id: "owner-1",
@@ -14,6 +15,29 @@ const owner = {
 function createService() {
   return new AuthService({ dbPath: ":memory:" });
 }
+
+test("CommerceLab login tenant options remain fixed and ordered", () => {
+  assert.deepEqual(COMPANY_LOGIN_TENANTS, [
+    "MCC",
+    "SCH",
+    "A101",
+    "GRC",
+    "ASC",
+    "KLD",
+    "BRR",
+    "SKCP",
+    "EVY",
+    "SKC",
+    "MRDIY",
+    "DEC",
+    "LWR",
+    "AK",
+    "FA",
+    "HFV",
+    "CL",
+    "HTR",
+  ]);
+});
 
 test("OwnerAdmin creates a multi-tenant user and login requires tenant selection", () => {
   const service = createService();
