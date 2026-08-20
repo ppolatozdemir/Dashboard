@@ -1,7 +1,7 @@
 # Jira Support Dashboard
 
 Jira Cloud verilerini tek bir web arayüzünde raporlayan, operasyonel görevleri kolaylaştıran ve ayrıca temel Jira işlemleri için komut satırı araçları sunan Node.js uygulaması.
-
+#
 > [!IMPORTANT]
 > Uygulama gerçek Jira verilerini okur; task oluşturma, etiket eşitleme ve e-posta gönderme gibi bazı işlemler Jira veya SMTP üzerinde değişiklik oluşturur. Üretim verisinde kullanmadan önce yetkileri ve seçilen proje/sprint bilgilerini kontrol edin.
 
