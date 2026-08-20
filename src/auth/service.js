@@ -1,7 +1,10 @@
 import path from "path";
 import { randomBytes, randomUUID } from "crypto";
 import { UserServiceClient } from "./client.js";
-import { ROLES } from "./constants.js";
+import {
+  getCompanyTenantScopes,
+  ROLES,
+} from "./constants.js";
 import { parseCookies } from "./cookies.js";
 import { hashPassword, verifyPasswordOrDummy } from "./credentials.js";
 import { AuthError } from "./error.js";
@@ -69,16 +72,36 @@ export class AuthService {
     if (token) this.repository.deleteCompanyTenantFlow(token);
   }
 
-  registerCompanySession(token, tenants, expiresAt) {
+  registerCompanySession(token, tenants, activeTenant, expiresAt) {
     const normalizedTenants = [...new Set(tenants.map(normalizeTenant))];
-    this.repository.registerCompanySession(token, normalizedTenants, expiresAt);
+    this.repository.registerCompanySession(
+      token,
+      normalizedTenants,
+      normalizeTenant(activeTenant),
+      expiresAt,
+    );
   }
 
-  getCompanySessionTenants(token) {
-    return this.repository.getCompanySessionTenants(
+  getCompanySession(token) {
+    return this.repository.getCompanySession(
       token,
       new Date().toISOString(),
     );
+  }
+
+  switchCompanyTenant(token, identity, tenant) {
+    tenant = normalizeTenant(tenant);
+    if (identity.role !== ROLES.OWNER_ADMIN) {
+      throw new AuthError(403, "Tenant değiştirme yetkiniz yok");
+    }
+    const session = this.getCompanySession(token);
+    if (!session || !session.tenants.includes(tenant)) {
+      throw new AuthError(403, "Seçilen tenant bu oturum için yetkili değil");
+    }
+    if (!this.repository.setCompanySessionTenant(token, tenant)) {
+      throw new AuthError(401, "Oturum sona erdi, tekrar giriş yapın");
+    }
+    return tenant;
   }
 
   cookieOptions(maxAge) {
@@ -209,14 +232,14 @@ export class AuthService {
     if (hasGlobalTenantAccess(actor)) {
       return this.repository.listAllUsers();
     }
-    if ([ROLES.OWNER_ADMIN, ROLES.TENANT_ADMIN].includes(actor.role)) {
+    if (actor.role === ROLES.OWNER_ADMIN) {
       return this.repository.listUsersByTenant(normalizeTenant(actor.tenant));
     }
     throw new AuthError(403, "Kullanıcı listesini görüntüleme yetkiniz yok");
   }
 
   deleteUser(actor, userId) {
-    if (![ROLES.OWNER_ADMIN, ROLES.TENANT_ADMIN].includes(actor.role)) {
+    if (actor.role !== ROLES.OWNER_ADMIN) {
       throw new AuthError(403, "Kullanıcı silme yetkiniz yok");
     }
     const user = this.repository.findUserById(userId);
@@ -225,25 +248,11 @@ export class AuthService {
       throw new AuthError(400, "Kendi kullanıcınızı silemezsiniz");
     }
     const tenant = normalizeTenant(actor.tenant);
-    this.assertCanDeleteUser(actor, user, tenant);
     if (hasGlobalTenantAccess(actor)) {
       this.repository.deleteUser(userId);
       return;
     }
     this.repository.deleteMembership(userId, tenant);
-  }
-
-  assertCanDeleteUser(actor, user, tenant) {
-    if (
-      actor.role === ROLES.TENANT_ADMIN &&
-      (user.role !== ROLES.TENANT_USER ||
-        !this.repository.hasMembership(user.id, tenant))
-    ) {
-      throw new AuthError(
-        403,
-        "TenantAdmin yalnız kendi tenantındaki TenantUser kayıtlarını silebilir",
-      );
-    }
   }
 
   localLogin({ tenant, username, password }) {
@@ -334,11 +343,14 @@ export class AuthService {
 
   async authenticateCompanyToken(token) {
     const identity = await this.validateCompanyToken(token);
-    identity.allowedTenants =
-      this.getCompanySessionTenants(token) ||
-      [identity.tenant].filter(Boolean);
-    if (!identity.allowedTenants.includes("HDV")) {
-      identity.allowedTenants.push("HDV");
+    const session = this.getCompanySession(token);
+    if (session) {
+      identity.allowedTenants = session.tenants;
+      identity.tenant = session.activeTenant || identity.tenant;
+      identity.tenantScope =
+        identity.role === ROLES.OWNER_ADMIN ? null : identity.tenant;
+    } else {
+      identity.allowedTenants = [identity.tenant].filter(Boolean);
     }
     return identity;
   }
@@ -355,19 +367,16 @@ export class AuthService {
   };
 
   requireWrite = (req, res, next) => {
-    if (req.auth?.role === ROLES.TENANT_USER) {
-      return res.status(403).json({
-        error: "TenantUser rolü yalnızca okuma işlemleri yapabilir",
-      });
-    }
     next();
   };
 
   requireTenantAccess = (tenant) => (req, res, next) => {
     const currentTenant = normalizeTenant(req.auth?.tenant);
+    const tenantScopes = getCompanyTenantScopes(currentTenant);
     if (
       hasGlobalTenantAccess(req.auth) ||
-      currentTenant === normalizeTenant(tenant)
+      currentTenant === normalizeTenant(tenant) ||
+      tenantScopes.includes(normalizeTenant(tenant))
     ) {
       return next();
     }

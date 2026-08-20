@@ -7,13 +7,10 @@ import {
   normalizeUsername,
 } from "./normalization.js";
 
-const LOCAL_CREATABLE_ROLES = new Set([
-  ROLES.TENANT_ADMIN,
-  ROLES.TENANT_USER,
-]);
+const LOCAL_CREATABLE_ROLES = new Set([ROLES.TENANT_ADMIN]);
 
 export function authorizeUserCreation(actor, input) {
-  if (![ROLES.OWNER_ADMIN, ROLES.TENANT_ADMIN].includes(actor.role)) {
+  if (actor.role !== ROLES.OWNER_ADMIN) {
     throw new AuthError(403, "Kullanıcı oluşturma yetkiniz yok");
   }
   const candidate = normalizeUserInput(input);
@@ -52,9 +49,6 @@ function validateUserInput(user) {
 }
 
 function validateTenantAssignment(actor, user) {
-  if (actor.role === ROLES.TENANT_ADMIN && user.role !== ROLES.TENANT_USER) {
-    throw new AuthError(403, "TenantAdmin yalnız TenantUser oluşturabilir");
-  }
   if (
     hasGlobalTenantAccess(actor) &&
     actor.source === "commercelab" &&

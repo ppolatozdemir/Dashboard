@@ -121,6 +121,21 @@
     cursor: pointer;
 }
 
+.auth-tenant-switch {
+    display: grid;
+    gap: 3px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.auth-tenant-switch select {
+    padding: 7px 9px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+
 .user-form {
     display: grid;
     grid-template-columns: repeat(2, minmax(180px, 1fr));

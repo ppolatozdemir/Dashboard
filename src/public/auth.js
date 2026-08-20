@@ -3,6 +3,17 @@
     let resolveAuth;
     let loginState = null;
     let currentUser = null;
+    const tenantNames = Object.freeze({
+        MCC: 'Madame Coco',
+        SCH: 'SoChic',
+        A101: 'A-101',
+        GRC: 'Grace Brands',
+        MRDIY: 'Mr. DIY',
+        DEC: 'Decathlon',
+        CL: 'CommerceLAB',
+        HD: 'HD',
+        OLKA: 'Olka'
+    });
 
     window.authReady = new Promise(resolve => {
         resolveAuth = resolve;
@@ -24,6 +35,10 @@
             .replaceAll('>', '&gt;')
             .replaceAll('"', '&quot;')
             .replaceAll("'", '&#039;');
+    }
+
+    function tenantName(tenant) {
+        return tenantNames[tenant] || tenant;
     }
 
     function injectAuthUi() {
@@ -133,7 +148,7 @@
                 }
                 const select = document.getElementById(`${prefix}Tenant`);
                 select.innerHTML = data.tenants
-                    .map(item => `<option value="${escapeHtml(item)}">${escapeHtml(item)}</option>`)
+                    .map(item => `<option value="${escapeHtml(item)}">${escapeHtml(tenantName(item))}</option>`)
                     .join('');
                 tenantField.hidden = false;
                 button.textContent = 'Tenant ile giriş yap';
@@ -167,27 +182,57 @@
             <div class="auth-user">
                 <div>
                     <strong>${escapeHtml(user.displayName)}</strong>
-                    <div class="auth-user-meta">${escapeHtml(user.role)}${user.tenant ? ` · ${escapeHtml(user.tenant)}` : ''}</div>
+                    <div class="auth-user-meta">${escapeHtml(user.role)}${user.tenant ? ` · ${escapeHtml(tenantName(user.tenant))}` : ''}</div>
                 </div>
+                ${renderTenantSwitch(user)}
                 <button class="auth-logout" id="authLogout" type="button">Çıkış</button>
             </div>
         `);
         document.getElementById('authLogout').addEventListener('click', logout);
-
-        if (user.role === 'TenantUser') {
-            const createTaskTab = document.getElementById('tabCreateTask');
-            const labelSyncRun = document.getElementById('labelSyncRunBtn');
-            if (createTaskTab) createTaskTab.hidden = true;
-            if (labelSyncRun) labelSyncRun.hidden = true;
-        }
+        document.getElementById('authTenantSwitch')?.addEventListener('change', switchTenant);
         if (user.tenant !== 'CL' && user.tenant !== 'MCC') {
             hideTab('tabMcBoard', 'mcBoardTabContent');
         }
-        if (user.tenant !== 'CL' && user.tenant !== 'HDV') {
+        if (user.tenant !== 'CL' && user.tenant !== 'HD' && user.tenant !== 'HDV') {
             hideTab('tabHdvStatus', 'hdvStatusTabContent');
         }
-        if (user.role === 'OwnerAdmin' || user.role === 'TenantAdmin') {
+        if (user.role === 'OwnerAdmin') {
             injectUserManagement();
+        }
+    }
+
+    function renderTenantSwitch(user) {
+        if (user.role !== 'OwnerAdmin' || !user.allowedTenants?.length) return '';
+        return `
+            <label class="auth-tenant-switch">
+                <span>Tenant</span>
+                <select id="authTenantSwitch">
+                    ${user.allowedTenants.map(tenant => `
+                        <option value="${escapeHtml(tenant)}"${tenant === user.tenant ? ' selected' : ''}>
+                            ${escapeHtml(tenantName(tenant))}
+                        </option>
+                    `).join('')}
+                </select>
+            </label>
+        `;
+    }
+
+    async function switchTenant(event) {
+        const select = event.currentTarget;
+        select.disabled = true;
+        try {
+            const response = await nativeFetch('/api/auth/tenant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tenant: select.value })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'Tenant değiştirilemedi.');
+            window.location.reload();
+        } catch (error) {
+            select.value = currentUser.tenant;
+            select.disabled = false;
+            window.alert(error.message);
         }
     }
 
@@ -209,7 +254,7 @@
                 <label for="authUserTenant">Tenant</label>
                 <select id="authUserTenant" required>
                     ${tenantOptions.map(tenant =>
-                        `<option value="${escapeHtml(tenant)}">${escapeHtml(tenant)}</option>`
+                        `<option value="${escapeHtml(tenant)}">${escapeHtml(tenantName(tenant))}</option>`
                     ).join('')}
                 </select>
             </div>
@@ -235,8 +280,7 @@
                         <div class="auth-field">
                             <label for="authUserRole">Rol</label>
                             <select id="authUserRole" required>
-                                ${currentUser.role === 'OwnerAdmin' ? '<option value="TenantAdmin">TenantAdmin</option>' : ''}
-                                <option value="TenantUser">TenantUser</option>
+                                <option value="TenantAdmin">TenantAdmin</option>
                             </select>
                         </div>
                         ${tenantFormField}
@@ -315,7 +359,7 @@
                             <tr>
                                 <td><strong>${escapeHtml(user.displayName)}</strong><br><span class="auth-user-meta">${escapeHtml(user.username)}</span></td>
                                 <td>${escapeHtml(user.role)}</td>
-                                ${showTenant ? `<td>${user.tenants.map(escapeHtml).join(', ')}</td>` : ''}
+                                ${showTenant ? `<td>${user.tenants.map(tenant => escapeHtml(tenantName(tenant))).join(', ')}</td>` : ''}
                                 <td><button class="user-delete" type="button" data-user-id="${escapeHtml(user.id)}">Sil</button></td>
                             </tr>
                         `).join('') || `<tr><td colspan="${showTenant ? 4 : 3}">Kullanıcı bulunmuyor.</td></tr>`}
@@ -332,6 +376,7 @@
 
     async function createUser(event) {
         event.preventDefault();
+        const form = event.currentTarget;
         const message = document.getElementById('authUserMessage');
         const tenant = document.getElementById('authUserTenant')?.value || currentUser.tenant;
         const body = {
@@ -351,7 +396,7 @@
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Kullanıcı oluşturulamadı.');
             message.textContent = 'Kullanıcı oluşturuldu.';
-            event.currentTarget.reset();
+            form.reset();
             await loadUsers();
         } catch (error) {
             message.textContent = error.message;

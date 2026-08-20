@@ -209,15 +209,28 @@ node src/index.js project list
 İki giriş yöntemi bulunur:
 
 1. **CommerceLab ile giriş:** Sunucu `POST /Auth/login` çağrısını User Service'e iletir. Birden fazla tenant dönerse kullanıcı seçim yapar. Token, backend'in korumalı `/Roles/GetRolesAsync` ucu üzerinden doğrulanır ve HttpOnly cookie'de tutulur.
-2. **Kullanıcı girişi:** OwnerAdmin veya TenantAdmin tarafından oluşturulan yerel hesapla giriş yapılır. Kullanıcıya birden fazla tenant atanmışsa şifre doğrulamasından sonra tenant seçimi gösterilir. Yerel oturum yalnız seçilen tenant için geçerlidir.
+2. **Kullanıcı girişi:** OwnerAdmin tarafından oluşturulan yerel hesapla giriş yapılır. Kullanıcıya birden fazla tenant atanmışsa şifre doğrulamasından sonra tenant seçimi gösterilir. Yerel oturum yalnız seçilen tenant için geçerlidir.
 
 | Rol | Veri okuma | Panel yazma işlemleri | Yerel kullanıcı yönetimi |
 | --- | --- | --- | --- |
-| `OwnerAdmin` | Tümü | Tümü | Her tenant için `TenantAdmin` ve `TenantUser` |
-| `TenantAdmin` | Aktif tenant | Aktif tenant | Yalnız aktif tenant için `TenantUser` |
-| `TenantUser` | Aktif tenant | Yok | Yok |
+| `OwnerAdmin` | Tümü | Tümü | Her tenant için `TenantAdmin` |
+| `TenantAdmin` | Aktif tenant | Aktif tenant | Yok |
 
 Yerel kullanıcı adları sistem genelinde benzersizdir. Şifreler düz metin tutulmaz; `scrypt` ile özetlenir. Kullanıcı–tenant ilişkileri SQLite'taki ayrı üyelik tablosunda saklanır. Varsayılan veritabanı `data/auth.db` dosyasıdır.
+
+### Tenant adları
+
+| Tenant kodu | Görünen ad |
+| --- | --- |
+| `MCC` | Madame Coco |
+| `SCH` | SoChic |
+| `A101` | A-101 |
+| `GRC` | Grace Brands |
+| `MRDIY` | Mr. DIY |
+| `DEC` | Decathlon |
+| `CL` | CommerceLAB |
+| `HD` | HD |
+| `OLKA` | Olka |
 
 ### Tenant sekme erişimi
 
@@ -226,7 +239,7 @@ Yerel kullanıcı adları sistem genelinde benzersizdir. Şifreler düz metin tu
 - Yerel kullanıcılar için özel `HDV` tenantı tanımlanabilir; bu tenant HDV Son Durum sekmesine ve API'sine erişir.
 - Yerel kullanıcılar için eşleşmeyen tenant sekmeleri arayüzde gizlenir ve API katmanında `403` ile engellenir.
 
-Kullanıcı yönetiminde aktif tenantı `CL` olan `OwnerAdmin` ve `TenantAdmin`, login akışından gelen tenant listesinden bir tenant seçerek kullanıcı oluşturur. Diğer tenantlarda tenant alanı görünmez; kullanıcı otomatik olarak aktif tenantına atanır. Yerel kullanıcı `CL` tenantına atanamaz.
+Kullanıcı yönetiminde aktif tenantı `CL` olan `OwnerAdmin`, login akışından gelen tenant listesinden bir tenant seçerek kullanıcı oluşturur. Diğer tenantlarda tenant alanı görünmez; kullanıcı otomatik olarak aktif tenantına atanır. Yerel kullanıcı `CL` tenantına atanamaz.
 
 ## Ortam değişkenleri
 

@@ -22,7 +22,7 @@ export class AuthRepository {
         display_name TEXT NOT NULL,
         password_salt TEXT NOT NULL,
         password_hash TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('TenantAdmin', 'TenantUser')),
+        role TEXT NOT NULL CHECK (role IN ('TenantAdmin')),
         is_active INTEGER NOT NULL DEFAULT 1,
         created_by TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -54,9 +54,19 @@ export class AuthRepository {
       CREATE TABLE IF NOT EXISTS auth_company_sessions (
         token_hash TEXT PRIMARY KEY,
         tenants_json TEXT NOT NULL,
+        active_tenant TEXT,
         expires_at TEXT NOT NULL
       );
     `);
+    const companySessionColumns = this.db
+      .prepare("PRAGMA table_info(auth_company_sessions)")
+      .all();
+    if (!companySessionColumns.some((column) => column.name === "active_tenant")) {
+      this.db.exec(
+        "ALTER TABLE auth_company_sessions ADD COLUMN active_tenant TEXT",
+      );
+    }
+    this.db.prepare("DELETE FROM auth_users WHERE role = 'TenantUser'").run();
   }
 
   createCompanyTenantFlow(token, tenants, expiresAt) {
@@ -85,24 +95,37 @@ export class AuthRepository {
       .run(hashToken(token));
   }
 
-  registerCompanySession(token, tenants, expiresAt) {
+  registerCompanySession(token, tenants, activeTenant, expiresAt) {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO auth_company_sessions (
-          token_hash, tenants_json, expires_at
-        ) VALUES (?, ?, ?)`,
+          token_hash, tenants_json, active_tenant, expires_at
+        ) VALUES (?, ?, ?, ?)`,
       )
-      .run(hashToken(token), JSON.stringify(tenants), expiresAt);
+      .run(hashToken(token), JSON.stringify(tenants), activeTenant, expiresAt);
   }
 
-  getCompanySessionTenants(token, now) {
+  getCompanySession(token, now) {
     const row = this.db
       .prepare(
-        `SELECT tenants_json FROM auth_company_sessions
+        `SELECT tenants_json, active_tenant FROM auth_company_sessions
          WHERE token_hash = ? AND expires_at > ?`,
       )
       .get(hashToken(token), now);
-    return row ? JSON.parse(row.tenants_json) : null;
+    return row
+      ? {
+          tenants: JSON.parse(row.tenants_json),
+          activeTenant: row.active_tenant,
+        }
+      : null;
+  }
+
+  setCompanySessionTenant(token, tenant) {
+    return this.db
+      .prepare(
+        "UPDATE auth_company_sessions SET active_tenant = ? WHERE token_hash = ?",
+      )
+      .run(tenant, hashToken(token)).changes;
   }
 
   deleteCompanySession(token) {
