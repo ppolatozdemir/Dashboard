@@ -10,7 +10,7 @@ import {
 const LOCAL_CREATABLE_ROLES = new Set([ROLES.TENANT_ADMIN]);
 
 export function authorizeUserCreation(actor, input) {
-  if (actor.role !== ROLES.OWNER_ADMIN) {
+  if (actor.role !== ROLES.OWNER_ADMIN && actor.role !== ROLES.TENANT_ADMIN) {
     throw new AuthError(403, "Kullanıcı oluşturma yetkiniz yok");
   }
   const candidate = normalizeUserInput(input);

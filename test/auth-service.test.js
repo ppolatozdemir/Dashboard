@@ -95,7 +95,7 @@ test("OwnerAdmin creates a multi-tenant user and login requires tenant selection
   }
 });
 
-test("TenantAdmin cannot create users", () => {
+test("TenantAdmin creates users only for its own tenant", () => {
   const service = createService();
   const tenantAdmin = {
     id: "admin-1",
@@ -106,23 +106,33 @@ test("TenantAdmin cannot create users", () => {
   };
 
   try {
+    const created = service.createUser(tenantAdmin, {
+      username: "admin2@example.com",
+      displayName: "Second Admin",
+      password: "strong-pass-123",
+      role: ROLES.TENANT_ADMIN,
+      tenants: ["KLD"],
+    });
+    assert.equal(created.role, ROLES.TENANT_ADMIN);
+    assert.deepEqual(created.tenants, ["KLD"]);
+
     assert.throws(
       () =>
         service.createUser(tenantAdmin, {
-          username: "admin2@example.com",
-          displayName: "Second Admin",
+          username: "admin3@example.com",
+          displayName: "Other Tenant Admin",
           password: "strong-pass-123",
           role: ROLES.TENANT_ADMIN,
-          tenants: ["KLD"],
+          tenants: ["ABC"],
         }),
-      /Kullanıcı oluşturma yetkiniz yok/,
+      /Kullanıcı yalnız aktif tenant için oluşturulabilir/,
     );
   } finally {
     service.close();
   }
 });
 
-test("TenantAdmin cannot list users", () => {
+test("TenantAdmin lists only its own tenant users", () => {
   const service = createService();
   try {
     service.createUser(owner, {
@@ -133,17 +143,15 @@ test("TenantAdmin cannot list users", () => {
       tenants: ["KLD", "ABC"],
     });
 
-    assert.throws(
-      () =>
-        service.listUsers({
-          ...owner,
-          role: ROLES.TENANT_ADMIN,
-          tenant: "KLD",
-          source: "local",
-          allowedTenants: undefined,
-        }),
-      /Kullanıcı listesini görüntüleme yetkiniz yok/,
-    );
+    const users = service.listUsers({
+      ...owner,
+      role: ROLES.TENANT_ADMIN,
+      tenant: "KLD",
+      source: "local",
+      allowedTenants: undefined,
+    });
+    assert.equal(users.length, 1);
+    assert.equal(users[0].username, "admin@example.com");
   } finally {
     service.close();
   }
@@ -236,7 +244,7 @@ test("OwnerAdmin role claim logs in without tenant-specific role lookup", async 
   }
 });
 
-test("CL TenantAdmin cannot create users", () => {
+test("CL TenantAdmin creates users within its allowed tenants", () => {
   const service = createService();
   const tenantAdmin = {
     id: "company-admin-1",
@@ -248,16 +256,25 @@ test("CL TenantAdmin cannot create users", () => {
   };
 
   try {
+    const created = service.createUser(tenantAdmin, {
+      username: "mcc-admin@example.com",
+      displayName: "MCC Admin",
+      password: "strong-pass-123",
+      role: ROLES.TENANT_ADMIN,
+      tenants: ["MCC"],
+    });
+    assert.deepEqual(created.tenants, ["MCC"]);
+
     assert.throws(
       () =>
         service.createUser(tenantAdmin, {
-          username: "mcc-admin@example.com",
-          displayName: "MCC Admin",
+          username: "other-admin@example.com",
+          displayName: "Other Admin",
           password: "strong-pass-123",
           role: ROLES.TENANT_ADMIN,
-          tenants: ["MCC"],
+          tenants: ["ABC"],
         }),
-      /Kullanıcı oluşturma yetkiniz yok/,
+      /Seçilen tenant CommerceLab oturumunuz için yetkili değil/,
     );
   } finally {
     service.close();
