@@ -14,6 +14,11 @@
         HD: 'HD',
         OLKA: 'Olka'
     });
+    const olkaTenants = new Set(['OLKA', 'SKC', 'SKCP', 'ASC', 'BRR', 'HFV', 'HTR', 'KLD']);
+    const hideLoginOverlayDuringTenantSwitch =
+        sessionStorage.getItem('dashboard-tenant-switch') === 'true';
+
+    sessionStorage.removeItem('dashboard-tenant-switch');
 
     window.authReady = new Promise(resolve => {
         resolveAuth = resolve;
@@ -43,7 +48,7 @@
 
     function injectAuthUi() {
         document.body.insertAdjacentHTML('afterbegin', `
-            <div class="auth-overlay" id="authOverlay">
+            <div class="auth-overlay" id="authOverlay"${hideLoginOverlayDuringTenantSwitch ? ' hidden' : ''}>
                 <div class="auth-card">
                     <h1>Jira Support Dashboard</h1>
                     <p>Devam etmek için giriş yapın.</p>
@@ -196,7 +201,14 @@
         if (user.tenant !== 'CL' && user.tenant !== 'HD' && user.tenant !== 'HDV') {
             hideTab('tabHdvStatus', 'hdvStatusTabContent');
         }
-        if (user.role === 'OwnerAdmin') {
+        if (user.tenant !== 'CL' && !olkaTenants.has(user.tenant)) {
+            hideTab('tabUnsprinted', 'unsprintedTabContent');
+            hideTab('tabOlkaDeploy', 'olkaDeployTabContent');
+            hideTab('tabOlkaSprint', 'olkaSprintTabContent');
+            hideTab('tabOlkaRoadmap', 'olkaRoadmapTabContent');
+            hideTab('tabLabelSync', 'labelSyncTabContent');
+        }
+        if (user.role === 'OwnerAdmin' || user.role === 'TenantAdmin') {
             injectUserManagement();
         }
     }
@@ -228,6 +240,7 @@
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Tenant değiştirilemedi.');
+            sessionStorage.setItem('dashboard-tenant-switch', 'true');
             window.location.reload();
         } catch (error) {
             select.value = currentUser.tenant;
@@ -326,7 +339,11 @@
             return originalSwitchTab(tab);
         };
         bindUserManagementEvents();
-        window.authUserListOptions = { showTenant: canChooseTenant, tenantColumn };
+        window.authUserListOptions = {
+            showTenant: canChooseTenant,
+            tenantColumn,
+            canDelete: currentUser.role === 'OwnerAdmin',
+        };
     }
 
     function getCompanyTenantOptions() {
@@ -351,18 +368,21 @@
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Kullanıcılar alınamadı.');
             const showTenant = window.authUserListOptions?.showTenant;
+            const canDelete = window.authUserListOptions?.canDelete;
+            const actionColumn = canDelete ? '<th></th>' : '';
+            const emptyColspan = (showTenant ? 3 : 2) + (canDelete ? 1 : 0);
             container.innerHTML = `
                 <table class="user-table">
-                    <thead><tr><th>Kullanıcı</th><th>Rol</th>${showTenant ? '<th>Tenant</th>' : ''}<th></th></tr></thead>
+                    <thead><tr><th>Kullanıcı</th><th>Rol</th>${showTenant ? '<th>Tenant</th>' : ''}${actionColumn}</tr></thead>
                     <tbody>
                         ${data.users.map(user => `
                             <tr>
                                 <td><strong>${escapeHtml(user.displayName)}</strong><br><span class="auth-user-meta">${escapeHtml(user.username)}</span></td>
                                 <td>${escapeHtml(user.role)}</td>
                                 ${showTenant ? `<td>${user.tenants.map(tenant => escapeHtml(tenantName(tenant))).join(', ')}</td>` : ''}
-                                <td><button class="user-delete" type="button" data-user-id="${escapeHtml(user.id)}">Sil</button></td>
+                                ${canDelete ? `<td><button class="user-delete" type="button" data-user-id="${escapeHtml(user.id)}">Sil</button></td>` : ''}
                             </tr>
-                        `).join('') || `<tr><td colspan="${showTenant ? 4 : 3}">Kullanıcı bulunmuyor.</td></tr>`}
+                        `).join('') || `<tr><td colspan="${emptyColspan}">Kullanıcı bulunmuyor.</td></tr>`}
                     </tbody>
                 </table>
             `;

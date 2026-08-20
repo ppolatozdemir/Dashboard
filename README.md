@@ -214,7 +214,7 @@ node src/index.js project list
 | Rol | Veri okuma | Panel yazma işlemleri | Yerel kullanıcı yönetimi |
 | --- | --- | --- | --- |
 | `OwnerAdmin` | Tümü | Tümü | Her tenant için `TenantAdmin` |
-| `TenantAdmin` | Aktif tenant | Aktif tenant | Yok |
+| `TenantAdmin` | Aktif tenant | Aktif tenant | Aktif tenant için `TenantAdmin` oluşturma ve listeleme (silme yok) |
 
 Yerel kullanıcı adları sistem genelinde benzersizdir. Şifreler düz metin tutulmaz; `scrypt` ile özetlenir. Kullanıcı–tenant ilişkileri SQLite'taki ayrı üyelik tablosunda saklanır. Varsayılan veritabanı `data/auth.db` dosyasıdır.
 
@@ -239,7 +239,7 @@ Yerel kullanıcı adları sistem genelinde benzersizdir. Şifreler düz metin tu
 - Yerel kullanıcılar için özel `HDV` tenantı tanımlanabilir; bu tenant HDV Son Durum sekmesine ve API'sine erişir.
 - Yerel kullanıcılar için eşleşmeyen tenant sekmeleri arayüzde gizlenir ve API katmanında `403` ile engellenir.
 
-Kullanıcı yönetiminde aktif tenantı `CL` olan `OwnerAdmin`, login akışından gelen tenant listesinden bir tenant seçerek kullanıcı oluşturur. Diğer tenantlarda tenant alanı görünmez; kullanıcı otomatik olarak aktif tenantına atanır. Yerel kullanıcı `CL` tenantına atanamaz.
+Kullanıcı yönetiminde aktif tenantı `CL` olan `OwnerAdmin`, login akışından gelen tenant listesinden bir tenant seçerek kullanıcı oluşturur. Diğer tenantlarda tenant alanı görünmez; kullanıcı otomatik olarak aktif tenantına atanır. `TenantAdmin` de aynı panelden yalnız kendi aktif tenantı için `TenantAdmin` oluşturabilir ve o tenantın kullanıcılarını listeleyebilir; kullanıcı silme yalnız `OwnerAdmin` yetkisindedir. Yerel kullanıcı `CL` tenantına atanamaz.
 
 ## Ortam değişkenleri
 

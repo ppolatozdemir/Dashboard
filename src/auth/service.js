@@ -232,7 +232,7 @@ export class AuthService {
     if (hasGlobalTenantAccess(actor)) {
       return this.repository.listAllUsers();
     }
-    if (actor.role === ROLES.OWNER_ADMIN) {
+    if (actor.role === ROLES.OWNER_ADMIN || actor.role === ROLES.TENANT_ADMIN) {
       return this.repository.listUsersByTenant(normalizeTenant(actor.tenant));
     }
     throw new AuthError(403, "Kullanıcı listesini görüntüleme yetkiniz yok");
