@@ -47,9 +47,11 @@ test("OLKA and HD aliases resolve to their backend tenant scopes", () => {
     "KLD",
   ]);
   assert.equal(getCompanyLoginTenant("HD"), "HDV");
+  assert.equal(getCompanyLoginTenant("HD", ["MCC", "CL"]), "CL");
+  assert.equal(getCompanyLoginTenant("HD", ["MCC"]), "MCC");
   assert.deepEqual(getCompanyTenantScopes("HD"), ["HDV"]);
   assert.deepEqual(
-    getCompanyTenantOptions(["MCC", "KLD", "SKC", "HDV", "EVY"]),
+    getCompanyTenantOptions(["MCC", "KLD", "SKC", "EVY"]),
     ["OLKA", "MCC", "HD"],
   );
 });
