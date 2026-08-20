@@ -6,6 +6,7 @@ import {
   listUsers,
   localLogin,
   logout,
+  switchTenant,
 } from "../controllers/auth-controller.js";
 
 export function registerPublicAuthRoutes(app) {
@@ -19,6 +20,7 @@ export function registerPublicAuthRoutes(app) {
 
 export function registerProtectedAuthRoutes(app) {
   app.get("/api/auth/me", currentUser);
+  app.post("/api/auth/tenant", switchTenant);
   app.get("/api/auth/users", listUsers);
   app.post("/api/auth/users", createUser);
   app.delete("/api/auth/users/:userId", deleteUser);

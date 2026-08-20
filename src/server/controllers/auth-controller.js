@@ -1,9 +1,14 @@
 import authService from "../../auth/service.js";
-import { COMPANY_LOGIN_TENANTS } from "../../auth/constants.js";
+import {
+  COMPANY_LOGIN_TENANTS,
+  getCompanyLoginTenant,
+  getCompanyTenantOptions,
+} from "../../auth/constants.js";
 import { normalizeTenant } from "../../auth/normalization.js";
 
 function tenantSelectionResponse(res, result) {
   const flow = authService.createCompanyTenantFlow(result.tenants);
+  const tenantOptions = getCompanyTenantOptions(result.tenants);
   res.cookie(
     authService.companyTenantFlowCookie,
     flow.token,
@@ -12,7 +17,7 @@ function tenantSelectionResponse(res, result) {
   return res.json({
     authenticated: false,
     requiresTenant: true,
-    tenants: result.tenants,
+    tenants: tenantOptions,
   });
 }
 
@@ -29,11 +34,11 @@ function getCompanyLoginContext(req, result) {
 }
 
 function completeCompanyLogin(res, result, context, maxAge) {
-  const { cookies, allowedTenants } = context;
-  const tenantOptions = [...new Set([...(allowedTenants || []), "HDV"])];
+  const { allowedTenants, cookies, selectedTenant } = context;
   authService.registerCompanySession(
     result.token,
-    tenantOptions,
+    getCompanyTenantOptions(allowedTenants),
+    selectedTenant,
     result.identity.expiresAt,
   );
   authService.deleteCompanyTenantFlow(
@@ -49,18 +54,43 @@ function completeCompanyLogin(res, result, context, maxAge) {
     authService.companyTenantFlowCookie,
     authService.cookieOptions(0),
   );
+  result.identity.tenant = normalizeTenant(selectedTenant);
   res.json({ authenticated: true, user: result.identity });
 }
 
 export async function companyLogin(req, res) {
   try {
-    const result = await authService.companyLogin(req.body || {});
+    const loginInput = { ...(req.body || {}) };
+    if (loginInput.tenant) {
+      const cookies = authService.getRequestCookies(req);
+      const availableTenants = authService.getCompanyTenantFlow(
+        cookies[authService.companyTenantFlowCookie],
+      );
+      if (!availableTenants) {
+        return res.status(403).json({
+          error: "Tenant seçim süresi doldu, tekrar giriş yapın",
+        });
+      }
+      loginInput.tenant = getCompanyLoginTenant(
+        normalizeTenant(loginInput.tenant),
+        availableTenants,
+      );
+      if (!loginInput.tenant) {
+        return res.status(403).json({
+          error: "Seçilen tenant CommerceLab giriş akışında bulunmuyor",
+        });
+      }
+    }
+    const result = await authService.companyLogin(loginInput);
     if (!req.body?.tenant) {
       return tenantSelectionResponse(res, {
-        tenants: COMPANY_LOGIN_TENANTS,
+        tenants:
+          result.kind === "tenant" ? result.tenants : COMPANY_LOGIN_TENANTS,
       });
     }
-    if (result.kind === "tenant") return tenantSelectionResponse(res, result);
+    if (result.kind === "tenant") {
+      return tenantSelectionResponse(res, result);
+    }
     const expiry = new Date(result.identity.expiresAt || 0).getTime();
     const maxAge = Math.max(0, expiry - Date.now());
     if (!Number.isFinite(maxAge) || maxAge <= 0) {
@@ -70,7 +100,10 @@ export async function companyLogin(req, res) {
     if (
       context.selectedTenant &&
       (!context.allowedTenants ||
-        !context.allowedTenants.includes(context.normalizedTenant))
+        !getCompanyLoginTenant(
+          context.normalizedTenant,
+          context.allowedTenants,
+        ))
     ) {
       return res.status(403).json({
         error: "Seçilen tenant CommerceLab giriş akışında bulunmuyor",
@@ -111,6 +144,20 @@ export function logout(req, res) {
 
 export function currentUser(req, res) {
   res.json({ user: req.auth });
+}
+
+export function switchTenant(req, res) {
+  try {
+    const cookies = authService.getRequestCookies(req);
+    const tenant = authService.switchCompanyTenant(
+      cookies[authService.companyCookie],
+      req.auth,
+      req.body?.tenant,
+    );
+    res.json({ tenant });
+  } catch (error) {
+    authService.sendError(res, error);
+  }
 }
 
 export function listUsers(req, res) {

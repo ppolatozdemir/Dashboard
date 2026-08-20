@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AuthService, ROLES } from "../src/lib/auth-service.js";
-import { COMPANY_LOGIN_TENANTS } from "../src/auth/constants.js";
+import {
+  COMPANY_LOGIN_TENANTS,
+  getCompanyLoginTenant,
+  getCompanyTenantOptions,
+  getCompanyTenantScopes,
+} from "../src/auth/constants.js";
 
 const owner = {
   id: "owner-1",
@@ -18,25 +23,35 @@ function createService() {
 
 test("CommerceLab login tenant options remain fixed and ordered", () => {
   assert.deepEqual(COMPANY_LOGIN_TENANTS, [
+    "OLKA",
     "MCC",
     "SCH",
     "A101",
     "GRC",
-    "ASC",
-    "KLD",
-    "BRR",
-    "SKCP",
-    "EVY",
-    "SKC",
     "MRDIY",
     "DEC",
-    "LWR",
-    "AK",
-    "FA",
-    "HFV",
     "CL",
-    "HTR",
+    "HD",
   ]);
+});
+
+test("OLKA and HD aliases resolve to their backend tenant scopes", () => {
+  assert.equal(getCompanyLoginTenant("OLKA", ["KLD", "MCC"]), "KLD");
+  assert.deepEqual(getCompanyTenantScopes("OLKA"), [
+    "SKC",
+    "SKCP",
+    "ASC",
+    "BRR",
+    "HFV",
+    "HTR",
+    "KLD",
+  ]);
+  assert.equal(getCompanyLoginTenant("HD"), "HDV");
+  assert.deepEqual(getCompanyTenantScopes("HD"), ["HDV"]);
+  assert.deepEqual(
+    getCompanyTenantOptions(["MCC", "KLD", "SKC", "HDV", "EVY"]),
+    ["OLKA", "MCC", "HD"],
+  );
 });
 
 test("OwnerAdmin creates a multi-tenant user and login requires tenant selection", () => {
@@ -78,7 +93,7 @@ test("OwnerAdmin creates a multi-tenant user and login requires tenant selection
   }
 });
 
-test("TenantAdmin can create only TenantUser in the active tenant", () => {
+test("TenantAdmin cannot create users", () => {
   const service = createService();
   const tenantAdmin = {
     id: "admin-1",
@@ -89,27 +104,6 @@ test("TenantAdmin can create only TenantUser in the active tenant", () => {
   };
 
   try {
-    const user = service.createUser(tenantAdmin, {
-      username: "reader@example.com",
-      displayName: "Tenant Reader",
-      password: "strong-pass-123",
-      role: ROLES.TENANT_USER,
-      tenants: ["KLD"],
-    });
-    assert.deepEqual(user.tenants, ["KLD"]);
-
-    assert.throws(
-      () =>
-        service.createUser(tenantAdmin, {
-          username: "other@example.com",
-          displayName: "Other Tenant",
-          password: "strong-pass-123",
-          role: ROLES.TENANT_USER,
-          tenants: ["ABC"],
-        }),
-      /yalnız aktif tenant/,
-    );
-
     assert.throws(
       () =>
         service.createUser(tenantAdmin, {
@@ -119,33 +113,35 @@ test("TenantAdmin can create only TenantUser in the active tenant", () => {
           role: ROLES.TENANT_ADMIN,
           tenants: ["KLD"],
         }),
-      /yalnız TenantUser/,
+      /Kullanıcı oluşturma yetkiniz yok/,
     );
   } finally {
     service.close();
   }
 });
 
-test("TenantAdmin listing exposes only the active tenant membership", () => {
+test("TenantAdmin cannot list users", () => {
   const service = createService();
   try {
     service.createUser(owner, {
-      username: "reader@example.com",
-      displayName: "Shared Reader",
+      username: "admin@example.com",
+      displayName: "Shared Admin",
       password: "strong-pass-123",
-      role: ROLES.TENANT_USER,
+      role: ROLES.TENANT_ADMIN,
       tenants: ["KLD", "ABC"],
     });
 
-    const users = service.listUsers({
-      ...owner,
-      role: ROLES.TENANT_ADMIN,
-      tenant: "KLD",
-      source: "local",
-      allowedTenants: undefined,
-    });
-    assert.equal(users.length, 1);
-    assert.deepEqual(users[0].tenants, ["KLD"]);
+    assert.throws(
+      () =>
+        service.listUsers({
+          ...owner,
+          role: ROLES.TENANT_ADMIN,
+          tenant: "KLD",
+          source: "local",
+          allowedTenants: undefined,
+        }),
+      /Kullanıcı listesini görüntüleme yetkiniz yok/,
+    );
   } finally {
     service.close();
   }
@@ -155,14 +151,14 @@ test("Removing a tenant membership invalidates its active local session", () => 
   const service = createService();
   try {
     const user = service.createUser(owner, {
-      username: "reader@example.com",
-      displayName: "Shared Reader",
+      username: "admin@example.com",
+      displayName: "Shared Admin",
       password: "strong-pass-123",
-      role: ROLES.TENANT_USER,
+      role: ROLES.TENANT_ADMIN,
       tenants: ["KLD", "ABC"],
     });
     const login = service.localLogin({
-      username: "reader@example.com",
+      username: "admin@example.com",
       password: "strong-pass-123",
       tenant: "KLD",
     });
@@ -170,7 +166,7 @@ test("Removing a tenant membership invalidates its active local session", () => 
     service.deleteUser(
       {
         ...owner,
-        role: ROLES.TENANT_ADMIN,
+        role: ROLES.OWNER_ADMIN,
         tenant: "KLD",
       },
       user.id,
@@ -238,7 +234,7 @@ test("OwnerAdmin role claim logs in without tenant-specific role lookup", async 
   }
 });
 
-test("CL TenantAdmin creates TenantUser in an allowed tenant", () => {
+test("CL TenantAdmin cannot create users", () => {
   const service = createService();
   const tenantAdmin = {
     id: "company-admin-1",
@@ -250,25 +246,16 @@ test("CL TenantAdmin creates TenantUser in an allowed tenant", () => {
   };
 
   try {
-    const user = service.createUser(tenantAdmin, {
-      username: "mcc-reader@example.com",
-      displayName: "MCC Reader",
-      password: "strong-pass-123",
-      role: ROLES.TENANT_USER,
-      tenants: ["MCC"],
-    });
-    assert.deepEqual(user.tenants, ["MCC"]);
-
     assert.throws(
       () =>
         service.createUser(tenantAdmin, {
-          username: "other-reader@example.com",
-          displayName: "Other Reader",
+          username: "mcc-admin@example.com",
+          displayName: "MCC Admin",
           password: "strong-pass-123",
-          role: ROLES.TENANT_USER,
-          tenants: ["ABC"],
+          role: ROLES.TENANT_ADMIN,
+          tenants: ["MCC"],
         }),
-      /CommerceLab oturumunuz için yetkili değil/,
+      /Kullanıcı oluşturma yetkiniz yok/,
     );
   } finally {
     service.close();
@@ -334,6 +321,51 @@ test("MCC and HDV sessions access their matching tenant reports", () => {
   service.close();
 });
 
+test("OLKA sessions access every grouped brand tenant", () => {
+  const service = createService();
+  for (const tenant of getCompanyTenantScopes("OLKA")) {
+    let proceeded = false;
+    service.requireTenantAccess(tenant)(
+      { auth: { source: "commercelab", tenant: "OLKA" } },
+      {},
+      () => {
+        proceeded = true;
+      },
+    );
+    assert.equal(proceeded, true);
+  }
+  service.close();
+});
+
+test("Only OwnerAdmin can switch an active company tenant", () => {
+  const service = createService();
+  const token = "company-token";
+  try {
+    service.registerCompanySession(
+      token,
+      COMPANY_LOGIN_TENANTS,
+      "OLKA",
+      new Date(Date.now() + 60_000).toISOString(),
+    );
+    assert.equal(
+      service.switchCompanyTenant(token, owner, "HD"),
+      "HD",
+    );
+    assert.equal(service.getCompanySession(token).activeTenant, "HD");
+    assert.throws(
+      () =>
+        service.switchCompanyTenant(
+          token,
+          { ...owner, role: ROLES.TENANT_ADMIN },
+          "MCC",
+        ),
+      /Tenant değiştirme yetkiniz yok/,
+    );
+  } finally {
+    service.close();
+  }
+});
+
 test("Non-CL tenant cannot create a user in another tenant", () => {
   const service = createService();
   try {
@@ -349,10 +381,10 @@ test("Non-CL tenant cannot create a user in another tenant", () => {
             allowedTenants: ["MCC", "HDV"],
           },
           {
-            username: "hdv-reader@example.com",
-            displayName: "HDV Reader",
+            username: "hdv-admin@example.com",
+            displayName: "HDV Admin",
             password: "strong-pass-123",
-            role: ROLES.TENANT_USER,
+            role: ROLES.TENANT_ADMIN,
             tenants: ["HDV"],
           },
         ),
@@ -369,10 +401,10 @@ test("Local users cannot be assigned to the CL tenant", () => {
     assert.throws(
       () =>
         service.createUser(owner, {
-          username: "cl-reader@example.com",
-          displayName: "CL Reader",
+          username: "cl-admin@example.com",
+          displayName: "CL Admin",
           password: "strong-pass-123",
-          role: ROLES.TENANT_USER,
+          role: ROLES.TENANT_ADMIN,
           tenants: ["CL"],
         }),
       /CL tenantına atanamaz/,
