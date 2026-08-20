@@ -173,39 +173,11 @@ class RfrReportService {
     }
 
     const now = Date.now();
-
-    const rows = await this._mapWithConcurrency(issues, 6, async (issue) => {
-      const f = issue.fields || {};
-      const statusName = f.status ? f.status.name : RFR_STATUS;
-
-      let rfrSince = null;
-      try {
-        const histories = await this._fetchIssueChangelog(issue.key);
-        rfrSince = this._computeRfrSince(histories, statusName, {
-          statusCategoryChangeDate: f.statuscategorychangedate,
-          created: f.created,
-        });
-      } catch (err) {
-        rfrSince = f.statuscategorychangedate || f.created || null;
-      }
-
-      const sinceMs = rfrSince ? new Date(rfrSince).getTime() : null;
-      const daysInRfr =
-        sinceMs != null
-          ? Math.max(0, Math.floor((now - sinceMs) / DAY_MS))
-          : null;
-      const overdue = daysInRfr != null && daysInRfr > OVERDUE_DAYS;
-
-      return {
-        key: issue.key,
-        summary: f.summary || "",
-        assignee: f.assignee ? f.assignee.displayName : null,
-        statusName,
-        rfrSince,
-        daysInRfr,
-        overdue,
-      };
-    });
+    const rows = await this._mapWithConcurrency(
+      issues,
+      6,
+      (issue) => this._mapRfrIssue(issue, now),
+    );
 
     // Kişi -> RFR'de en uzun bekleyen üstte olacak şekilde sırala.
     rows.sort((a, b) => {
@@ -216,27 +188,7 @@ class RfrReportService {
       return (b.daysInRfr || 0) - (a.daysInRfr || 0);
     });
 
-    // Kişi bazlı özet
-    const peopleMap = new Map();
-    for (const r of rows) {
-      const name = r.assignee || "Atanmamış";
-      if (!peopleMap.has(name)) {
-        peopleMap.set(name, {
-          name,
-          count: 0,
-          overdueCount: 0,
-          maxDays: 0,
-        });
-      }
-      const p = peopleMap.get(name);
-      p.count++;
-      if (r.overdue) p.overdueCount++;
-      if ((r.daysInRfr || 0) > p.maxDays) p.maxDays = r.daysInRfr || 0;
-    }
-    const people = [...peopleMap.values()].sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"),
-    );
-
+    const people = this._summarizePeople(rows);
     return {
       status: RFR_STATUS,
       overdueDays: OVERDUE_DAYS,
@@ -247,6 +199,57 @@ class RfrReportService {
       people,
       rows,
     };
+  }
+
+  async _mapRfrIssue(issue, now) {
+    const fields = issue.fields || {};
+    const statusName = fields.status ? fields.status.name : RFR_STATUS;
+    let rfrSince = null;
+    try {
+      const histories = await this._fetchIssueChangelog(issue.key);
+      rfrSince = this._computeRfrSince(histories, statusName, {
+        statusCategoryChangeDate: fields.statuscategorychangedate,
+        created: fields.created,
+      });
+    } catch (error) {
+      rfrSince = fields.statuscategorychangedate || fields.created || null;
+    }
+    const sinceMs = rfrSince ? new Date(rfrSince).getTime() : null;
+    const daysInRfr =
+      sinceMs != null ? Math.max(0, Math.floor((now - sinceMs) / DAY_MS)) : null;
+    return {
+      key: issue.key,
+      summary: fields.summary || "",
+      assignee: fields.assignee ? fields.assignee.displayName : null,
+      statusName,
+      rfrSince,
+      daysInRfr,
+      overdue: daysInRfr != null && daysInRfr > OVERDUE_DAYS,
+    };
+  }
+
+  _summarizePeople(rows) {
+    const peopleMap = new Map();
+    for (const row of rows) {
+      const name = row.assignee || "Atanmamış";
+      if (!peopleMap.has(name)) {
+        peopleMap.set(name, {
+          name,
+          count: 0,
+          overdueCount: 0,
+          maxDays: 0,
+        });
+      }
+      const person = peopleMap.get(name);
+      person.count++;
+      if (row.overdue) person.overdueCount++;
+      if ((row.daysInRfr || 0) > person.maxDays) {
+        person.maxDays = row.daysInRfr || 0;
+      }
+    }
+    return [...peopleMap.values()].sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"),
+    );
   }
 
   /**

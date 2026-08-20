@@ -170,101 +170,97 @@ class McBoardReportService {
       "updated",
     ];
 
-    // Statü meta + board sütun düzeni
     const statusMeta = await this._getStatusMeta();
-
-    let boardId = null;
-    let boardName = null;
-    let columnsDef = null;
-    try {
-      const board = await this._getBoard();
-      if (board) {
-        boardId = board.id;
-        boardName = board.name;
-        columnsDef = await this._getBoardColumns(board.id);
-      }
-    } catch (err) {
-      columnsDef = null;
-    }
-    if (!columnsDef || !columnsDef.length) {
-      columnsDef = this._fallbackColumns(statusMeta);
-    }
-
-    // Kartlar: tüm aktif maddeler + son RECENT_DAYS içinde güncellenen Done maddeleri
+    const board = await this._resolveBoard(statusMeta);
     const activeJql = `project = "${PROJECT_KEY}" AND statusCategory != Done ORDER BY updated DESC`;
     const doneJql = `project = "${PROJECT_KEY}" AND statusCategory = Done AND updated >= -${RECENT_DAYS}d ORDER BY updated DESC`;
-
     const [activeIssues, doneIssues] = await Promise.all([
       this._searchAllJql(activeJql, fields),
       this._searchAllJql(doneJql, fields, DONE_FETCH_CAP),
     ]);
-
     const rows = [...activeIssues, ...doneIssues].map((i) => this._mapIssue(i));
-
-    // Statü id -> kartlar
-    const byStatus = new Map();
-    for (const r of rows) {
-      if (!r.statusId) continue;
-      if (!byStatus.has(r.statusId)) byStatus.set(r.statusId, []);
-      byStatus.get(r.statusId).push(r);
-    }
-
-    // Sütunları kur (board sırasına göre). Her sütunun gerçek toplamı approximate-count ile.
-    const columns = [];
-    let totalTrue = 0;
-
-    for (const col of columnsDef) {
-      const statusIds = (col.statusIds || []).filter(Boolean);
-
-      let cards = [];
-      for (const id of statusIds) cards.push(...(byStatus.get(id) || []));
-      cards.sort((a, b) => new Date(b.updated || 0) - new Date(a.updated || 0));
-
-      const shown = cards.slice(0, DISPLAY_CAP);
-
-      let count = null;
-      if (statusIds.length) {
-        const countJql = `project = "${PROJECT_KEY}" AND status in (${statusIds.join(
-          ",",
-        )})`;
-        count = await this._approxCount(countJql);
-      }
-      if (count == null) count = cards.length;
-      totalTrue += count;
-
-      // Sütun kategorisi (renk) = ilk bilinen statünün kategorisi
-      let category = "undefined";
-      for (const id of statusIds) {
-        if (statusMeta[id]) {
-          category = statusMeta[id].category;
-          break;
-        }
-      }
-
-      columns.push({
-        name: col.name,
-        statusIds,
-        statusNames: statusIds
-          .map((id) => statusMeta[id]?.name)
-          .filter(Boolean),
-        category,
-        count,
-        shownCount: shown.length,
-        cards: shown,
-      });
-    }
-
+    const { columns, totalTrue } = await this._buildColumns(
+      board.columns,
+      statusMeta,
+      this._groupByStatus(rows),
+    );
     return {
       project: PROJECT_KEY,
-      projectName: boardName ? boardName.replace(/\s*board$/i, "").trim() : PROJECT_KEY,
-      boardId,
-      boardName,
+      projectName: board.name
+        ? board.name.replace(/\s*board$/i, "").trim()
+        : PROJECT_KEY,
+      boardId: board.id,
+      boardName: board.name,
       recentDays: RECENT_DAYS,
       totalTrue,
       activeCount: activeIssues.length,
       generatedAt: new Date().toISOString(),
       columns,
     };
+  }
+
+  async _resolveBoard(statusMeta) {
+    let board = { id: null, name: null, columns: null };
+    try {
+      const selected = await this._getBoard();
+      if (selected) {
+        board = {
+          id: selected.id,
+          name: selected.name,
+          columns: await this._getBoardColumns(selected.id),
+        };
+      }
+    } catch (error) {
+      board.columns = null;
+    }
+    if (!board.columns || !board.columns.length) {
+      board.columns = this._fallbackColumns(statusMeta);
+    }
+    return board;
+  }
+
+  _groupByStatus(rows) {
+    const grouped = new Map();
+    for (const row of rows) {
+      if (!row.statusId) continue;
+      if (!grouped.has(row.statusId)) grouped.set(row.statusId, []);
+      grouped.get(row.statusId).push(row);
+    }
+    return grouped;
+  }
+
+  async _buildColumns(definitions, statusMeta, byStatus) {
+    const columns = [];
+    let totalTrue = 0;
+    for (const definition of definitions) {
+      const statusIds = (definition.statusIds || []).filter(Boolean);
+      const cards = statusIds.flatMap((id) => byStatus.get(id) || []);
+      cards.sort((a, b) => new Date(b.updated || 0) - new Date(a.updated || 0));
+      const shown = cards.slice(0, DISPLAY_CAP);
+      const count = await this._columnCount(statusIds, cards.length);
+      totalTrue += count;
+      const knownStatus = statusIds.find((id) => statusMeta[id]);
+      columns.push({
+        name: definition.name,
+        statusIds,
+        statusNames: statusIds
+          .map((id) => statusMeta[id]?.name)
+          .filter(Boolean),
+        category: knownStatus ? statusMeta[knownStatus].category : "undefined",
+        count,
+        shownCount: shown.length,
+        cards: shown,
+      });
+    }
+    return { columns, totalTrue };
+  }
+
+  async _columnCount(statusIds, fallback) {
+    if (!statusIds.length) return fallback;
+    const jql = `project = "${PROJECT_KEY}" AND status in (${statusIds.join(
+      ",",
+    )})`;
+    return (await this._approxCount(jql)) ?? fallback;
   }
 }
 

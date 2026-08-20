@@ -175,90 +175,85 @@ class OlkaSprintReportService {
       ? closed.find((s) => String(s.id) === String(sprintId))
       : closed[0];
     if (!target) target = closed[0];
-
-    if (!target) {
-      return {
-        sprint: null,
-        sprints: sprintList,
-        rows: [],
-        completed: [],
-        remaining: [],
-        blocked: [],
-        stats: {
-          total: 0,
-          completed: 0,
-          remaining: 0,
-          blocked: 0,
-          successRate: 0,
-        },
-        perProject: {},
-        prefixes: TARGET_PREFIXES,
-        count: 0,
-      };
-    }
-
+    if (!target) return this._emptySprintReport(sprintList);
     const issues = await this._fetchAllSprintIssues(target.id, [
       "summary",
       "status",
       "assignee",
       "issuetype",
     ]);
-
-    const rows = [];
-    for (const it of issues) {
-      const key = it.key || "";
-      const prefix = key.split("-")[0].toUpperCase();
-      if (!TARGET_PREFIXES.includes(prefix)) continue;
-
-      const f = it.fields || {};
-      const statusName = f.status ? f.status.name : "";
-      const statusCategoryKey =
-        f.status && f.status.statusCategory
-          ? f.status.statusCategory.key
-          : null;
-      const statusCategoryName =
-        f.status && f.status.statusCategory
-          ? f.status.statusCategory.name
-          : null;
-
-      rows.push({
-        key,
-        project: prefix,
-        summary: f.summary || "",
-        assignee: f.assignee ? f.assignee.displayName : null,
-        issueType: f.issuetype ? f.issuetype.name : null,
-        status: statusName,
-        statusCategory: statusCategoryKey,
-        statusCategoryName,
-        category: this.classifyStatus(statusName, statusCategoryKey),
-      });
-    }
-
+    const rows = issues
+      .map((issue) => this._mapSprintIssue(issue))
+      .filter(Boolean);
     rows.sort(
       (a, b) =>
         a.project.localeCompare(b.project) ||
         a.key.localeCompare(b.key, undefined, { numeric: true }),
     );
+    return this._buildSprintReport(target, sprintList, rows);
+  }
 
+  _emptySprintReport(sprints) {
+    return {
+      sprint: null,
+      sprints,
+      rows: [],
+      completed: [],
+      remaining: [],
+      blocked: [],
+      stats: {
+        total: 0,
+        completed: 0,
+        remaining: 0,
+        blocked: 0,
+        successRate: 0,
+      },
+      perProject: {},
+      prefixes: TARGET_PREFIXES,
+      count: 0,
+    };
+  }
+
+  _mapSprintIssue(issue) {
+    const key = issue.key || "";
+    const project = key.split("-")[0].toUpperCase();
+    if (!TARGET_PREFIXES.includes(project)) return null;
+    const fields = issue.fields || {};
+    const statusName = fields.status ? fields.status.name : "";
+    const statusCategory = fields.status?.statusCategory;
+    return {
+      key,
+      project,
+      summary: fields.summary || "",
+      assignee: fields.assignee ? fields.assignee.displayName : null,
+      issueType: fields.issuetype ? fields.issuetype.name : null,
+      status: statusName,
+      statusCategory: statusCategory ? statusCategory.key : null,
+      statusCategoryName: statusCategory ? statusCategory.name : null,
+      category: this.classifyStatus(
+        statusName,
+        statusCategory ? statusCategory.key : null,
+      ),
+    };
+  }
+
+  _buildSprintReport(target, sprintList, rows) {
     const completed = rows.filter((r) => r.category === "completed");
     const remaining = rows.filter((r) => r.category === "remaining");
     const blocked = rows.filter((r) => r.category === "blocked");
     const total = rows.length;
     const successRate =
       total > 0 ? Math.round((completed.length / total) * 1000) / 10 : 0;
-
-    // Proje bazlı (OLK / SKCH) kırılım
     const perProject = {};
-    for (const p of TARGET_PREFIXES) {
-      const sub = rows.filter((r) => r.project === p);
-      perProject[p] = {
-        total: sub.length,
-        completed: sub.filter((r) => r.category === "completed").length,
-        remaining: sub.filter((r) => r.category === "remaining").length,
-        blocked: sub.filter((r) => r.category === "blocked").length,
+    for (const project of TARGET_PREFIXES) {
+      const subset = rows.filter((row) => row.project === project);
+      perProject[project] = {
+        total: subset.length,
+        completed: subset.filter((row) => row.category === "completed").length,
+        remaining: subset.filter((row) => row.category === "remaining").length,
+        blocked: subset.filter((row) => row.category === "blocked").length,
       };
     }
-
     return {
       sprint: {
         id: target.id,

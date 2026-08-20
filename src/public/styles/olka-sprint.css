@@ -1,0 +1,121 @@
+/* Olka Sprint Rapor */
+.osr-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+    align-items: start;
+}
+
+.osr-col {
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-bg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 640px;
+}
+
+.osr-col-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    font-weight: 700;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.osr-col.completed .osr-col-header { background: rgba(76,175,80,0.18); color: var(--accent-green); }
+.osr-col.remaining .osr-col-header { background: rgba(255,159,28,0.18); color: var(--accent-orange); }
+.osr-col.blocked .osr-col-header { background: rgba(230,57,70,0.18); color: var(--accent-red); }
+
+.osr-col-count {
+    font-size: 13px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.14);
+}
+
+.osr-list {
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.osr-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-hover);
+}
+
+.osr-item:hover { background: var(--table-row-hover); }
+
+.osr-item-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.osr-item-key {
+    font-weight: 700;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.osr-item-key .osr-proj {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 6px;
+    margin-right: 6px;
+    background: rgba(67,97,238,0.25);
+    color: var(--text-primary);
+}
+
+.osr-status {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 8px;
+    white-space: nowrap;
+    background: rgba(255,255,255,0.12);
+}
+
+.osr-item-summary {
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    line-height: 1.35;
+}
+
+.osr-item-assignee {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.osr-list-empty {
+    text-align: center;
+    padding: 24px 12px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.osr-progress-wrap {
+    height: 10px;
+    border-radius: 6px;
+    background: var(--border-color);
+    overflow: hidden;
+    margin-top: 8px;
+}
+
+.osr-progress-bar {
+    height: 100%;
+    background: var(--accent-green);
+    border-radius: 6px;
+    transition: width 0.4s ease;
+}

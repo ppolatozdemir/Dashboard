@@ -153,22 +153,7 @@ class RejectReportService {
       issues = await this._searchAllJql(baseJql, fields);
     }
 
-    const rows = issues.map((issue) => {
-      const f = issue.fields || {};
-      const project = f.project || {};
-      return {
-        key: issue.key,
-        summary: f.summary || "",
-        assignee: f.assignee ? f.assignee.displayName : null,
-        statusName: f.status ? f.status.name : "Reject",
-        projectKey: project.key || "?",
-        projectName: project.name || project.key || "?",
-        issueType: f.issuetype ? f.issuetype.name : null,
-        priority: f.priority ? f.priority.name : null,
-        created: f.created || null,
-        updated: f.updated || null,
-      };
-    });
+    const rows = issues.map((issue) => this._mapRejectIssue(issue));
 
     // Proje adına göre (Türkçe) sırala; aynı projede key'e göre.
     rows.sort((a, b) => {
@@ -186,24 +171,7 @@ class RejectReportService {
       allProjects = [];
     }
 
-    const projectMap = new Map();
-    for (const p of allProjects) {
-      projectMap.set(p.key, { key: p.key, name: p.name, count: 0 });
-    }
-    for (const r of rows) {
-      if (!projectMap.has(r.projectKey)) {
-        projectMap.set(r.projectKey, {
-          key: r.projectKey,
-          name: r.projectName,
-          count: 0,
-        });
-      }
-      projectMap.get(r.projectKey).count++;
-    }
-    // Reject'i olanlar üstte (sayı azalan), sonra kalan projeler ada göre.
-    const projects = [...projectMap.values()].sort(
-      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"),
-    );
+    const projects = this._summarizeProjects(allProjects, rows);
     const rejectProjectCount = projects.filter((p) => p.count > 0).length;
 
     return {
@@ -216,6 +184,47 @@ class RejectReportService {
       projects,
       rows,
     };
+  }
+
+  _mapRejectIssue(issue) {
+    const fields = issue.fields || {};
+    const project = fields.project || {};
+    return {
+      key: issue.key,
+      summary: fields.summary || "",
+      assignee: fields.assignee ? fields.assignee.displayName : null,
+      statusName: fields.status ? fields.status.name : "Reject",
+      projectKey: project.key || "?",
+      projectName: project.name || project.key || "?",
+      issueType: fields.issuetype ? fields.issuetype.name : null,
+      priority: fields.priority ? fields.priority.name : null,
+      created: fields.created || null,
+      updated: fields.updated || null,
+    };
+  }
+
+  _summarizeProjects(allProjects, rows) {
+    const projects = new Map();
+    for (const project of allProjects) {
+      projects.set(project.key, {
+        key: project.key,
+        name: project.name,
+        count: 0,
+      });
+    }
+    for (const row of rows) {
+      if (!projects.has(row.projectKey)) {
+        projects.set(row.projectKey, {
+          key: row.projectKey,
+          name: row.projectName,
+          count: 0,
+        });
+      }
+      projects.get(row.projectKey).count++;
+    }
+    return [...projects.values()].sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"),
+    );
   }
 
   /**

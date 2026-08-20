@@ -8,6 +8,52 @@ const HEBIAR_BASE_URL = (
   process.env.HEBIAR_BASE_URL || "https://hebiar.atlassian.net"
 ).replace(/\/$/, "");
 
+const WORKLOAD_EXCLUDED_STATUS_LABELS = {
+  "customer action": "Customer Action",
+  "ready for release": "Ready For Release",
+  merge: "Merge",
+  merged: "Merged",
+  "on hold": "On Hold",
+  block: "Block",
+  "qa testing": "QA Testing",
+  test: "Test",
+  deleted: "Deleted",
+};
+
+const WORKLOAD_EXCLUDED_NAMES = [
+  "Hakan Gürses", "Hakan Gurses", "Arif Kula", "Bilal Çetin",
+  "Oğuzhan Portakal", "Mizgin Aydeniz", "Ömer Faruk Sandıkçı",
+  "Furkan Gencer", "Burak Karagöz", "Ömer Kurtbey", "Faruk Nafiz Öksüz",
+  "Gökhan Koçak", "Gökhan KOÇAK", "Serkan Doksöz",
+  "Tahir Polat Özdemir", "id", "Atanmamış",
+];
+
+const CLOSED_EXCLUDED_NAMES = [
+  "Hakan Gürses", "Hakan Gurses", "Arif Kula", "Bilal Çetin",
+  "Oğuzhan Portakal", "Mizgin Aydeniz", "Ömer Faruk Sandıkçı",
+  "Furkan Gencer", "Burak Karagöz", "Ömer Kurtbey", "Faruk Nafiz Öksüz",
+  "Gökhan Koçak", "Gökhan KOÇAK", "Cihat Bulut", "Cihat BULUT", "Atanmamış",
+];
+
+const KNOWN_EMAILS = {
+  "Tahir Polat Özdemir": "polat.ozdemir@commercelab.com.tr",
+  "Serkan doksöz": "serkan.doksoz@commercelab.com.tr",
+  "Yasin Teker": "yasin.teker@commercelab.com.tr",
+  "Sertaç YALÇINKAYA": "sertac.yalcinkaya@commercelab.com.tr",
+  "Alper Özçelik": "alper.ozcelik@commercelab.com.tr",
+  "Burak Karagöz": "burak.karagoz@commercelab.com.tr",
+  "Faruk Nafiz Öksüz": "faruk.oksuz@commercelab.com.tr",
+  "Gökhan Koçak": "gokhan.kocak@commercelab.com.tr",
+  "Ömer Kurtbey": "omer.kurtbey@commercelab.com.tr",
+  "Furkan Gencer": "furkan.gencer@commercelab.com.tr",
+  "Ömer Faruk Sandıkçı": "omer.sandikci@commercelab.com.tr",
+  "Bilal Çetin": "bilal.cetin@commercelab.com.tr",
+  "Arif Kula": "arif.kula@commercelab.com.tr",
+  "Mizgin Aydeniz": "mizgin.aydeniz@commercelab.com.tr",
+  "Oğuzhan Portakal": "oguzhan.portakal@commercelab.com.tr",
+  "Hakan Gürses": "hakan.gurses@commercelab.com.tr",
+};
+
 class SupportReportService {
   constructor() {
     this.client = jiraClient;
@@ -675,206 +721,117 @@ class SupportReportService {
    */
   async getDailyWorkloadReport() {
     this.client.init();
-
     console.log(`📊 Günlük iş yükü raporu oluşturuluyor...`);
+    const { sprintIssues, supportIssues } =
+      await this._fetchDailyWorkloadIssues();
+    const filtered = this._filterWorkloadIssues(sprintIssues, supportIssues);
+    console.log(
+      `🚫 Hariç tutulan statüler nedeniyle ${
+        sprintIssues.length - filtered.sprintIssues.length
+      } sprint task sayılmadı.`,
+    );
+    const rows = Array.from(
+      this._groupWorkloadPeople(filtered.sprintIssues, filtered.supportIssues),
+    )
+      .filter((p) => p.total > 0)
+      .sort((a, b) => b.total - a.total);
+    return {
+      generatedAt: new Date().toISOString(),
+      rows,
+      totals: this._sumPersonRows(rows),
+      sprintTaskCount: filtered.sprintIssues.length,
+      supportTaskCount: filtered.supportIssues.length,
+      excludedStatusBreakdown: filtered.excludedStatusBreakdown,
+    };
+  }
 
-    // 1. Aktif WEEKLY sprintteki (Hebiar board 54) tamamlanmamış taskları çek.
-    // Not: openSprints() TÜM panolardaki açık sprintleri kapsar (ör. MC projesinin
-    // "MC Sprint 1" sprinti). Bu rapor YALNIZCA weekly board'un aktif sprint(ler)ini
-    // içermelidir; bu yüzden aktif weekly sprint id'lerine göre filtreliyoruz.
+  async _fetchDailyWorkloadIssues() {
     const weeklySprintIds = await this.getActiveWeeklySprintIds();
     const sprintJql = weeklySprintIds.length
       ? `sprint in (${weeklySprintIds.join(", ")}) AND statusCategory != Done ORDER BY "cf[10020]" DESC`
       : `sprint in openSprints() AND sprint NOT IN futureSprints() AND statusCategory != Done ORDER BY "cf[10020]" DESC`;
-    const sprintFields = ["summary", "status", "assignee", "project"];
-
     const sprintIssues = await this.searchHebiarJql(
       sprintJql,
-      sprintFields,
+      ["summary", "status", "assignee", "project"],
       500,
     );
     console.log(`✅ Aktif sprintte ${sprintIssues.length} açık task bulundu.`);
-
-    // 2. Customer Support = Evet olan açık support taskları çek.
-    // Statü allow-list'i ve "created >= -100d" penceresi kullanıcının verdiği JQL
-    // ile birebir aynıdır. Bu JQL "On Hold" ve "test" statülerini bilerek dahil
-    // ettiği için aşağıdaki hariç tutulan statü filtresi support'a UYGULANMAZ.
     const supportJql = `created >= -100d AND status in (Backlog, "Customer Action Required", Escalated, "In Progress", "On Hold", Open, Pending, Reopened, "Request For Development", "Selected For Development", test, Returned, "To Do", Uat, "Waiting for customer", "Waiting for support", "Work in progress") AND "Customer Support[Dropdown]" = Evet ORDER BY assignee ASC, created DESC`;
-    const supportFields = [
-      "summary",
-      "status",
-      "assignee",
-      "customfield_10079",
-      "project",
-    ];
-
     const supportIssues = await this.searchHebiarJql(
       supportJql,
-      supportFields,
+      ["summary", "status", "assignee", "customfield_10079", "project"],
       2000,
     );
-    console.log(
-      `✅ Support alanında ${supportIssues.length} açık task bulundu.`,
-    );
+    console.log(`✅ Support alanında ${supportIssues.length} açık task bulundu.`);
+    return { sprintIssues, supportIssues };
+  }
 
-    // Rapordan hariç tutulacak statüler - bu statülerdeki tasklar sayılmaz.
-    // Anahtar: karşılaştırma için küçük harf, değer: kutucukta gösterilecek etiket.
-    const excludedStatusLabels = {
-      "customer action": "Customer Action",
-      "ready for release": "Ready For Release",
-      merge: "Merge",
-      merged: "Merged",
-      "on hold": "On Hold",
-      block: "Block",
-      "qa testing": "QA Testing",
-      test: "Test",
-      // "Deleted" statüsü Done kategorisinde olmadığı için JQL'e takılmıyor; iş yükü değil.
-      deleted: "Deleted",
-    };
-    const excludedStatuses = Object.keys(excludedStatusLabels);
+  _filterWorkloadIssues(sprintIssues, supportIssues) {
+    const statuses = Object.keys(WORKLOAD_EXCLUDED_STATUS_LABELS);
     const normalizeStatus = (issue) =>
       (issue.fields.status?.name || "").toLowerCase().trim();
-    const isExcludedStatus = (issue) =>
-      excludedStatuses.includes(normalizeStatus(issue));
-
     const filteredSprintIssues = sprintIssues.filter(
-      (i) => !isExcludedStatus(i),
+      (issue) => !statuses.includes(normalizeStatus(issue)),
     );
-    // Support tarafı JQL'deki statü allow-list'i ile zaten sınırlıdır (On Hold ve
-    // test dahil), bu yüzden hariç tutulan statü filtresi support'a uygulanmaz;
-    // kişi bazlı support sayısı verilen JQL sonucuyla birebir eşleşir.
-    const filteredSupportIssues = supportIssues;
-    console.log(
-      `🚫 Hariç tutulan statüler nedeniyle ${
-        sprintIssues.length - filteredSprintIssues.length
-      } sprint task sayılmadı.`,
-    );
-
-    // Hariç tutulan statülerin kutucuklarda gösterilecek sayıları (tekilleştirilmiş).
-    // Sadece sprint tarafı için hesaplanır; support tarafı allow-list ile sınırlıdır.
-    const excludedStatusCountMap = new Map(excludedStatuses.map((s) => [s, 0]));
-    const seenExcludedKeys = new Set();
-    sprintIssues.forEach((issue) => {
+    const counts = new Map(statuses.map((status) => [status, 0]));
+    const seen = new Set();
+    for (const issue of sprintIssues) {
       const status = normalizeStatus(issue);
-      if (!excludedStatusCountMap.has(status)) return;
-      if (seenExcludedKeys.has(issue.key)) return;
-      seenExcludedKeys.add(issue.key);
-      excludedStatusCountMap.set(
-        status,
-        excludedStatusCountMap.get(status) + 1,
-      );
-    });
-    const excludedStatusBreakdown = excludedStatuses.map((s) => ({
-      status: excludedStatusLabels[s],
-      count: excludedStatusCountMap.get(s),
-    }));
+      if (!counts.has(status) || seen.has(issue.key)) continue;
+      seen.add(issue.key);
+      counts.set(status, counts.get(status) + 1);
+    }
+    return {
+      sprintIssues: filteredSprintIssues,
+      supportIssues,
+      excludedStatusBreakdown: statuses.map((status) => ({
+        status: WORKLOAD_EXCLUDED_STATUS_LABELS[status],
+        count: counts.get(status),
+      })),
+    };
+  }
 
-    // Kişi bazlı grupla
-    const personMap = new Map();
-
-    // Sprint taskları ekle
-    filteredSprintIssues.forEach((issue) => {
-      const assignee = issue.fields.assignee;
-      const personName = assignee?.displayName || "Atanmamış";
-      const personId = assignee?.accountId || "unassigned";
-
-      if (!personMap.has(personId)) {
-        personMap.set(personId, {
-          personId,
-          personName,
-          sprint: 0,
-          support: 0,
-          total: 0,
-        });
-      }
-
-      personMap.get(personId).sprint++;
-    });
-
-    // Support taskları ekle
-    filteredSupportIssues.forEach((issue) => {
-      const assignee = issue.fields.assignee;
-      const personName = assignee?.displayName || "Atanmamış";
-      const personId = assignee?.accountId || "unassigned";
-
-      if (!personMap.has(personId)) {
-        personMap.set(personId, {
-          personId,
-          personName,
-          sprint: 0,
-          support: 0,
-          total: 0,
-        });
-      }
-
-      personMap.get(personId).support++;
-    });
-
-    // Hariç tutulacak kişiler (kişi bazlı gizleme).
-    const excludedNames = [
-      "Hakan Gürses",
-      "Hakan Gurses",
-      "Arif Kula",
-      "Bilal Çetin",
-      "Oğuzhan Portakal",
-      "Mizgin Aydeniz",
-      "Ömer Faruk Sandıkçı",
-      "Furkan Gencer",
-      "Burak Karagöz",
-      "Ömer Kurtbey",
-      "Faruk Nafiz Öksüz",
-      "Gökhan Koçak",
-      "Gökhan KOÇAK",
-      "Serkan Doksöz",
-      "Tahir Polat Özdemir",
-      "id",
-      "Atanmamış",
-    ];
-
-    // Küçük harfe çevrilmiş hariç listesi
-    const excludedNamesLower = excludedNames.map((n) => n.toLowerCase());
-    const isExcludedPerson = (personName) =>
-      excludedNamesLower.some(
-        (name) =>
-          personName.toLowerCase().includes(name) ||
-          name.includes(personName.toLowerCase()),
-      );
-
-    // Toplamları hesapla. Kişi gizleme filtresi SADECE sprint tarafına uygulanır:
-    // gizlenen kişilerin sprint sayısı 0'lanır, ancak support sayısı korunur ki
-    // support toplamı verilen JQL sonucuyla (tüm kişiler dahil) birebir eşleşsin.
-    personMap.forEach((person) => {
-      if (isExcludedPerson(person.personName)) {
+  _groupWorkloadPeople(sprintIssues, supportIssues) {
+    const people = new Map();
+    for (const issue of sprintIssues) this._addPersonIssue(people, issue, "sprint");
+    for (const issue of supportIssues) {
+      this._addPersonIssue(people, issue, "support");
+    }
+    const excluded = WORKLOAD_EXCLUDED_NAMES.map((name) => name.toLowerCase());
+    for (const person of people.values()) {
+      const personName = person.personName.toLowerCase();
+      if (excluded.some((name) => personName.includes(name) || name.includes(personName))) {
         person.sprint = 0;
       }
       person.total = person.sprint + person.support;
-    });
+    }
+    return people.values();
+  }
 
-    // Array'e çevir ve sırala (toplam'a göre). total > 0 olan herkes gösterilir;
-    // böylece gizlenen kişiler yalnızca support tasklarıyla tabloda görünebilir.
-    const rows = Array.from(personMap.values())
-      .filter((p) => p.total > 0)
-      .sort((a, b) => b.total - a.total);
+  _addPersonIssue(people, issue, type) {
+    const assignee = issue.fields.assignee;
+    const personId = assignee?.accountId || "unassigned";
+    if (!people.has(personId)) {
+      people.set(personId, {
+        personId,
+        personName: assignee?.displayName || "Atanmamış",
+        sprint: 0,
+        support: 0,
+        total: 0,
+      });
+    }
+    people.get(personId)[type]++;
+  }
 
-    // Alt toplam hesapla
-    const totals = rows.reduce(
-      (acc, row) => {
-        acc.sprint += row.sprint;
-        acc.support += row.support;
-        acc.total += row.total;
-        return acc;
-      },
+  _sumPersonRows(rows) {
+    return rows.reduce(
+      (totals, row) => ({
+        sprint: totals.sprint + row.sprint,
+        support: totals.support + row.support,
+        total: totals.total + row.total,
+      }),
       { sprint: 0, support: 0, total: 0 },
     );
-
-    return {
-      generatedAt: new Date().toISOString(),
-      rows,
-      totals,
-      sprintTaskCount: filteredSprintIssues.length,
-      supportTaskCount: filteredSupportIssues.length,
-      excludedStatusBreakdown,
-    };
   }
 
   /**
@@ -885,40 +842,35 @@ class SupportReportService {
    */
   async getDailyClosedReport(date = null) {
     this.client.init();
-
-    // Tarih belirle
     const targetDate = date || new Date().toISOString().split("T")[0];
-
-    // Bir sonraki günü hesapla
-    const targetDateObj = new Date(targetDate);
-    const nextDay = new Date(targetDateObj);
-    nextDay.setDate(nextDay.getDate() + 1);
-    const nextDayStr = nextDay.toISOString().split("T")[0];
-
     console.log(`📊 Günlük kapanan task raporu (${targetDate})...`);
+    const { sprintIssues, supportIssues } =
+      await this._fetchDailyClosedIssues(targetDate);
+    console.log(
+      `✅ Sprint: ${sprintIssues.length}, Support: ${supportIssues.length} kapanan task bulundu.`,
+    );
+    const rows = Array.from(
+      this._groupClosedPeople(sprintIssues, supportIssues).values(),
+    )
+      .filter((p) => p.total > 0)
+      .sort((a, b) => b.total - a.total);
+    return {
+      generatedAt: new Date().toISOString(),
+      date: targetDate,
+      rows,
+      totals: this._sumPersonRows(rows),
+      totalIssues: sprintIssues.length + supportIssues.length,
+    };
+  }
 
-    // Ortak status listesi
-    const statusList =
+  async _fetchDailyClosedIssues(targetDate) {
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const nextDayString = nextDay.toISOString().split("T")[0];
+    const statuses =
       'Closed, Tamam, Done, Merged, MERGED, Onlive, OnLive, ONLIVE, "Ready For Release", "ready for release", "READY FOR RELEASE", Resolved, "QA TESTING"';
-
-    // Tamamlanma kriteri: listedeki statüler VEYA "Tamamlandı" (Done) kategorisindeki
-    // herhangi bir statü. Böylece HDV gibi projelerin özel done statüleri
-    // (ör. "CUSTOMER TEST", "TAMAM") da tamamlanan işlere dahil olur.
-    const doneClause = `(status in (${statusList}) OR statusCategory = Done)`;
-
-    // Kapanış günü çıpası: normalde "due" (bitiş) tarihi kullanılır. Ancak bazı
-    // maddeler (ör. HDV) due tarihi girilmeden kapatılıyor; bu durumda maddenin
-    // gerçekten kapandığı gün olan resolutiondate'e göre eşleştiririz. Böylece
-    // due tarihi olan maddelerin davranışı değişmez, yalnızca due'su boş bırakılıp
-    // o gün kapatılan maddeler de rapora dahil olur.
-    const dayClause = `((due >= "${targetDate}" AND due < "${nextDayStr}") OR (due is EMPTY AND resolutiondate >= "${targetDate}" AND resolutiondate < "${nextDayStr}"))`;
-
-    // Sprint kolonu için JQL: Sprint is not EMPTY
-    const sprintJql = `${dayClause} AND ${doneClause} AND Sprint is not EMPTY ORDER BY assignee ASC`;
-
-    // Support kolonu için JQL: Sprint is empty AND assignee is not EMPTY
-    const supportJql = `${dayClause} AND ${doneClause} AND Sprint is empty AND assignee is not EMPTY ORDER BY assignee ASC`;
-
+    const done = `(status in (${statuses}) OR statusCategory = Done)`;
+    const day = `((due >= "${targetDate}" AND due < "${nextDayString}") OR (due is EMPTY AND resolutiondate >= "${targetDate}" AND resolutiondate < "${nextDayString}"))`;
     const fields = [
       "summary",
       "status",
@@ -928,111 +880,49 @@ class SupportReportService {
       "customfield_10079",
       "project",
     ];
-
-    // İki sorguyu paralel çalıştır (Hebiar Jira)
     const [sprintIssues, supportIssues] = await Promise.all([
-      this.searchHebiarJql(sprintJql, fields, 500),
-      this.searchHebiarJql(supportJql, fields, 500),
+      this.searchHebiarJql(
+        `${day} AND ${done} AND Sprint is not EMPTY ORDER BY assignee ASC`,
+        fields,
+        500,
+      ),
+      this.searchHebiarJql(
+        `${day} AND ${done} AND Sprint is empty AND assignee is not EMPTY ORDER BY assignee ASC`,
+        fields,
+        500,
+      ),
     ]);
+    return { sprintIssues, supportIssues };
+  }
 
-    console.log(
-      `✅ Sprint: ${sprintIssues.length}, Support: ${supportIssues.length} kapanan task bulundu.`,
-    );
+  _groupClosedPeople(sprintIssues, supportIssues) {
+    const people = new Map();
+    for (const issue of sprintIssues) {
+      this._addClosedIssue(people, issue, "sprint");
+    }
+    for (const issue of supportIssues) {
+      this._addClosedIssue(people, issue, "support");
+    }
+    return people;
+  }
 
-    // Hariç tutulacak kişiler
-    const excludedNames = [
-      "Hakan Gürses",
-      "Hakan Gurses",
-      "Arif Kula",
-      "Bilal Çetin",
-      "Oğuzhan Portakal",
-      "Mizgin Aydeniz",
-      "Ömer Faruk Sandıkçı",
-      "Furkan Gencer",
-      "Burak Karagöz",
-      "Ömer Kurtbey",
-      "Faruk Nafiz Öksüz",
-      "Gökhan Koçak",
-      "Gökhan KOÇAK",
-      "Cihat Bulut",
-      "Cihat BULUT",
-      "Atanmamış",
-    ];
-
-    // Kişi bazlı grupla
-    const personMap = new Map();
-
-    // Sprint task'larını ekle
-    sprintIssues.forEach((issue) => {
-      const assignee = issue.fields.assignee;
-      const personName = assignee?.displayName || "Atanmamış";
-      const personId = assignee?.accountId || "unassigned";
-
-      // Hariç tutulan kişileri atla
-      if (excludedNames.includes(personName)) return;
-
-      if (!personMap.has(personId)) {
-        personMap.set(personId, {
-          personId,
-          personName,
-          sprint: 0,
-          support: 0,
-          total: 0,
-        });
-      }
-
-      const person = personMap.get(personId);
-      person.sprint++;
-      person.total++;
-    });
-
-    // Support task'larını ekle
-    supportIssues.forEach((issue) => {
-      const assignee = issue.fields.assignee;
-      const personName = assignee?.displayName || "Atanmamış";
-      const personId = assignee?.accountId || "unassigned";
-
-      // Hariç tutulan kişileri atla
-      if (excludedNames.includes(personName)) return;
-
-      if (!personMap.has(personId)) {
-        personMap.set(personId, {
-          personId,
-          personName,
-          sprint: 0,
-          support: 0,
-          total: 0,
-        });
-      }
-
-      const person = personMap.get(personId);
-      person.support++;
-      person.total++;
-    });
-
-    // Array'e çevir ve sırala
-    const rows = Array.from(personMap.values())
-      .filter((p) => p.total > 0)
-      .sort((a, b) => b.total - a.total);
-
-    // Alt toplam hesapla
-    const totals = rows.reduce(
-      (acc, row) => {
-        acc.sprint += row.sprint;
-        acc.support += row.support;
-        acc.total += row.total;
-        return acc;
-      },
-      { sprint: 0, support: 0, total: 0 },
-    );
-
-    return {
-      generatedAt: new Date().toISOString(),
-      date: targetDate,
-      rows,
-      totals,
-      totalIssues: sprintIssues.length + supportIssues.length,
-    };
+  _addClosedIssue(people, issue, type) {
+    const assignee = issue.fields.assignee;
+    const personName = assignee?.displayName || "Atanmamış";
+    if (CLOSED_EXCLUDED_NAMES.includes(personName)) return;
+    const personId = assignee?.accountId || "unassigned";
+    if (!people.has(personId)) {
+      people.set(personId, {
+        personId,
+        personName,
+        sprint: 0,
+        support: 0,
+        total: 0,
+      });
+    }
+    const person = people.get(personId);
+    person[type]++;
+    person.total++;
   }
 
   /**
@@ -1041,94 +931,19 @@ class SupportReportService {
    */
   async getProjectSprintReport(projectKey = "ALL") {
     this.client.init();
-
     console.log(
       `🏃 Board 54 aktif sprint raporu oluşturuluyor (Tüm projeler)...`,
     );
-
-    // Board 54 (weekly sprint) aktif sprint bilgisini çek
     const sprintInfo = await this.getActiveSprintInfo();
-
-    // Sprint ID varsa o sprint'e göre, yoksa genel sorgu
-    let jql;
-    if (sprintInfo.id) {
-      // Board 54'teki aktif sprint - TÜM projelerin taskları
-      jql = `sprint = ${sprintInfo.id} AND statusCategory != Done ORDER BY project ASC, assignee ASC`;
-    } else {
-      // Fallback: Açık sprintlerde olan tüm tasklar
-      jql = `sprint in openSprints() AND sprint NOT IN futureSprints() AND statusCategory != Done ORDER BY project ASC, assignee ASC`;
-    }
-
+    const jql = sprintInfo.id
+      ? `sprint = ${sprintInfo.id} AND statusCategory != Done ORDER BY project ASC, assignee ASC`
+      : `sprint in openSprints() AND sprint NOT IN futureSprints() AND statusCategory != Done ORDER BY project ASC, assignee ASC`;
     const fields = ["summary", "status", "assignee", "project", "sprint"];
-
     const issues = await this.client.searchIssuesJql(jql, fields, 500);
     console.log(`✅ ${issues.length} açık task bulundu.`);
-
-    // Bilinen kişilerin email adresleri (Jira privacy nedeniyle göstermiyor)
-    const knownEmails = {
-      "Tahir Polat Özdemir": "polat.ozdemir@commercelab.com.tr",
-      "Serkan doksöz": "serkan.doksoz@commercelab.com.tr",
-      "Yasin Teker": "yasin.teker@commercelab.com.tr",
-      "Sertaç YALÇINKAYA": "sertac.yalcinkaya@commercelab.com.tr",
-      "Alper Özçelik": "alper.ozcelik@commercelab.com.tr",
-      "Burak Karagöz": "burak.karagoz@commercelab.com.tr",
-      "Faruk Nafiz Öksüz": "faruk.oksuz@commercelab.com.tr",
-      "Gökhan Koçak": "gokhan.kocak@commercelab.com.tr",
-      "Ömer Kurtbey": "omer.kurtbey@commercelab.com.tr",
-      "Furkan Gencer": "furkan.gencer@commercelab.com.tr",
-      "Ömer Faruk Sandıkçı": "omer.sandikci@commercelab.com.tr",
-      "Bilal Çetin": "bilal.cetin@commercelab.com.tr",
-      "Arif Kula": "arif.kula@commercelab.com.tr",
-      "Mizgin Aydeniz": "mizgin.aydeniz@commercelab.com.tr",
-      "Oğuzhan Portakal": "oguzhan.portakal@commercelab.com.tr",
-      "Hakan Gürses": "hakan.gurses@commercelab.com.tr",
-    };
-
-    // Kişi bazlı grupla
-    const personMap = new Map();
-
-    issues.forEach((issue) => {
-      const assignee = issue.fields.assignee;
-      const personName = assignee?.displayName || "Atanmamış";
-      const personId = assignee?.accountId || "unassigned";
-      // Önce Jira'dan gelen email'i kontrol et, yoksa bilinen emaillerden al
-      const email = assignee?.emailAddress || knownEmails[personName] || null;
-
-      if (!personMap.has(personId)) {
-        personMap.set(personId, {
-          personId,
-          personName,
-          email,
-          taskCount: 0,
-          tasks: [],
-        });
-      }
-
-      const person = personMap.get(personId);
-      person.taskCount++;
-      person.tasks.push({
-        key: issue.key,
-        summary: issue.fields.summary,
-        status: issue.fields.status?.name || "Unknown",
-        project: issue.fields.project?.key || "",
-      });
-    });
-
-    // Array'e çevir ve sırala
-    const rows = Array.from(personMap.values())
+    const rows = Array.from(this._groupSprintPeople(issues).values())
       .filter((p) => p.taskCount > 0 && p.personName !== "Atanmamış")
       .sort((a, b) => b.taskCount - a.taskCount);
-
-    // Proje bazlı grupla
-    const projectMap = new Map();
-    issues.forEach((issue) => {
-      const projectKey = issue.fields.project?.key || "Unknown";
-      if (!projectMap.has(projectKey)) {
-        projectMap.set(projectKey, 0);
-      }
-      projectMap.set(projectKey, projectMap.get(projectKey) + 1);
-    });
-
     return {
       generatedAt: new Date().toISOString(),
       projectKey: "ALL",
@@ -1136,8 +951,45 @@ class SupportReportService {
       sprint: sprintInfo,
       rows,
       totalTasks: issues.length,
-      projectBreakdown: Object.fromEntries(projectMap),
+      projectBreakdown: this._sprintProjectBreakdown(issues),
     };
+  }
+
+  _groupSprintPeople(issues) {
+    const people = new Map();
+    for (const issue of issues) {
+      const assignee = issue.fields.assignee;
+      const personName = assignee?.displayName || "Atanmamış";
+      const personId = assignee?.accountId || "unassigned";
+      const email = assignee?.emailAddress || KNOWN_EMAILS[personName] || null;
+      if (!people.has(personId)) {
+        people.set(personId, {
+          personId,
+          personName,
+          email,
+          taskCount: 0,
+          tasks: [],
+        });
+      }
+      const person = people.get(personId);
+      person.taskCount++;
+      person.tasks.push({
+        key: issue.key,
+        summary: issue.fields.summary,
+        status: issue.fields.status?.name || "Unknown",
+        project: issue.fields.project?.key || "",
+      });
+    }
+    return people;
+  }
+
+  _sprintProjectBreakdown(issues) {
+    const projects = new Map();
+    for (const issue of issues) {
+      const projectKey = issue.fields.project?.key || "Unknown";
+      projects.set(projectKey, (projects.get(projectKey) || 0) + 1);
+    }
+    return Object.fromEntries(projects);
   }
 
   /**
