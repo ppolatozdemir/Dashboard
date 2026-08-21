@@ -7,10 +7,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <link rel="stylesheet" href="/auth.css?v=3">
-    <link rel="stylesheet" href="/styles/loading.css">
-    <script src="/scripts/loading/constants.js"></script>
-    <script src="/scripts/loading/functions.js"></script>
-    <script src="/scripts/loading/implementations.js"></script>
+    <link rel="stylesheet" href="/styles/loading.css?v=2">
+    <script src="/scripts/loading/constants.js?v=2"></script>
+    <script src="/scripts/loading/functions.js?v=2"></script>
+    <script src="/scripts/loading/implementations.js?v=2"></script>
     <script src="/auth.js"></script>
     <link rel="stylesheet" href="/styles/base.css">
     <link rel="stylesheet" href="/styles/reports.css">
@@ -35,7 +35,7 @@
     <!-- Tab Bar -->
     <nav class="tab-bar" aria-label="Dashboard bölümleri">
         <div class="sidebar-brand">
-            <img class="sidebar-brand-logo" src="/assets/LABBoard.png" alt="LAB Board">
+            <img class="sidebar-brand-logo" src="/amblems/LABboard.png" alt="LAB Board">
         </div>
         <div class="sidebar-label">Raporlar ve işlemler</div>
         <button type="button" class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">📋 İş Yükü</button>
@@ -68,7 +68,6 @@
             </p>
             <div id="dailyReportContent">
                 <div class="loading" style="height: 200px;">
-                    <span>Günlük rapor yükleniyor...</span>
                 </div>
             </div>
         </div>
@@ -91,7 +90,6 @@
             </p>
             <div id="closedReportContent">
                 <div class="loading" style="height: 200px;">
-                    <span>Kapanan task raporu yükleniyor...</span>
                 </div>
             </div>
         </div>
@@ -472,8 +470,6 @@ Alerjen ikonu güncellenecek | Remzi Erarslan" required></textarea>
             </p>
             <div id="olkaRoadmapContent">
                 <div class="loading" style="height: 160px;">
-                    <div class="loading-spinner"></div>
-                    <span>Roadmap verisi yükleniyor...</span>
                 </div>
             </div>
         </div>

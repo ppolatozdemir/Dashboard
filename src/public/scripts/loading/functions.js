@@ -7,32 +7,18 @@
     }
 
     function emblemFor(tenant) {
-        return constants.tenantEmblems[normalizeTenant(tenant)] || null;
+        return constants.tenantEmblems[normalizeTenant(tenant)] || constants.tenantEmblems.CL;
     }
 
     function spinnerMarkup(tenant, size = 'content') {
         const normalizedTenant = normalizeTenant(tenant);
         const emblem = emblemFor(normalizedTenant);
-        const image = emblem
-            ? `<img class="tenant-loader-emblem" src="${emblem}" alt="" aria-hidden="true">`
-            : '';
         return `
             <span class="tenant-loader tenant-loader--${size}"
                   data-loader-tenant="${normalizedTenant}" aria-hidden="true">
-                ${image}
-                <span class="tenant-loader-fallback${emblem ? '' : ' is-visible'}"></span>
+                <img class="tenant-loader-emblem" src="${emblem}" alt="" aria-hidden="true">
             </span>
         `;
-    }
-
-    function bindFallback(root) {
-        root.querySelectorAll('.tenant-loader-emblem:not([data-fallback-bound])').forEach(image => {
-            image.dataset.fallbackBound = 'true';
-            image.addEventListener('error', () => {
-                image.hidden = true;
-                image.nextElementSibling?.classList.add('is-visible');
-            }, { once: true });
-        });
     }
 
     function setActiveTenant(tenant) {
@@ -52,11 +38,8 @@
             const tenant = currentTenant();
             const existingLoader = element.querySelector('.tenant-loader');
             if (existingLoader?.dataset.loaderTenant === tenant) return;
-            existingLoader?.remove();
-            element.querySelector('.loading-spinner')?.remove();
-            element.insertAdjacentHTML('afterbegin', spinnerMarkup(tenant));
+            element.innerHTML = spinnerMarkup(tenant);
         });
-        bindFallback(root);
     }
 
     function ensureTransitionOverlay() {
@@ -67,8 +50,6 @@
                  role="status" aria-live="polite" aria-label="Tenant yükleniyor">
                 <div class="tenant-transition-card">
                     <div id="tenantTransitionSpinner"></div>
-                    <strong>Tenant yükleniyor</strong>
-                    <span>İçerik hazırlanıyor...</span>
                 </div>
             </div>
         `);
@@ -79,7 +60,6 @@
     function renderTransitionSpinner(tenant) {
         const container = document.getElementById('tenantTransitionSpinner');
         container.innerHTML = spinnerMarkup(tenant, 'transition');
-        bindFallback(container);
     }
 
     function showTenantTransition(tenant) {

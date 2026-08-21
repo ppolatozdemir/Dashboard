@@ -25,9 +25,9 @@ test("health remains public", async () => {
   });
 });
 
-test("LAB Board logo is served from project assets", async () => {
+test("LAB Board logo is served from public emblems", async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/assets/LABBoard.png`);
+    const response = await fetch(`${baseUrl}/amblems/LAB.png`);
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type"), /^image\//);
     assert.ok((await response.arrayBuffer()).byteLength > 0);
