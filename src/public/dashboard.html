@@ -40,6 +40,7 @@
         <div class="sidebar-label">Raporlar ve işlemler</div>
         <button type="button" class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">📋 İş Yükü</button>
         <button type="button" class="tab-btn" id="tabClosed" onclick="switchTab('closed')">✅ Günlük Kapanan</button>
+        <button type="button" class="tab-btn" id="tabUnsprinted" onclick="switchTab('unsprinted')">🚫 Sprinte Alınmayan</button>
         <button type="button" class="tab-btn" id="tabOlkaDeploy" onclick="switchTab('olkaDeploy')">🚀 Olka Deploy</button>
         <button type="button" class="tab-btn" id="tabRfr" onclick="switchTab('rfr')">🚦 RFR Takip</button>
         <button type="button" class="tab-btn" id="tabReject" onclick="switchTab('reject')">⛔ Reject Takip</button>
@@ -95,6 +96,44 @@
         </div>
     </div>
     
+    <!-- Sprinte Alınmayan Tab İçeriği -->
+    <div class="tab-content" id="unsprintedTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>🚫 Sprinte Alınmayan Tasklar</h2>
+                <div class="daily-report-controls">
+                    <button class="refresh-btn" onclick="loadUnsprintedSprints()">🔄 Sprintleri Yenile</button>
+                    <button class="refresh-btn" onclick="loadUnsprintedReport()" style="background: #4361ee;">🔍 Karşılaştır</button>
+                    <button class="refresh-btn" id="exportUnsprintedExcelBtn" onclick="exportUnsprintedExcel()" style="background: #1d6f42;">📥 Excel İndir</button>
+                </div>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
+                Olka <strong>(E-COMM DEVELOPMENT TEAM)</strong> sprintinde olup, seçilen Hebiar <strong>(weekly)</strong> sprintine <strong>alınmamış</strong> tasklar listelenir.
+                Eşleştirme, Olka taskındaki <code>CLLINK</code> alanına göre yapılır.
+            </p>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
+                <div style="flex: 1; min-width: 260px;">
+                    <label style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px;">🟦 Olka Sprint (E-COMM DEVELOPMENT TEAM)</label>
+                    <select class="form-select" id="olkaSprintSelect" style="width: 100%;">
+                        <option value="">Sprintler yükleniyor...</option>
+                    </select>
+                </div>
+                <div style="flex: 1; min-width: 260px;">
+                    <label style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px;">🟩 Hebiar Weekly Sprint</label>
+                    <select class="form-select" id="hebiarSprintSelect" style="width: 100%;">
+                        <option value="">Sprintler yükleniyor...</option>
+                    </select>
+                </div>
+            </div>
+            <div id="unsprintedInfoBar" style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;"></div>
+            <div id="unsprintedReportContent">
+                <div style="text-align: center; padding: 30px; color: var(--text-muted);">
+                    İki sprint seçip <strong>"Karşılaştır"</strong> butonuna tıklayın.
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Olka Deploy Tab İçeriği -->
     <div class="tab-content" id="olkaDeployTabContent">
         <div class="daily-report-panel">
@@ -478,6 +517,7 @@ Alerjen ikonu güncellenecek | Remzi Erarslan" required></textarea>
     <script src="/scripts/core/app-shell.js?v=2"></script>
     <script src="/scripts/shared/capture.js"></script>
     <script src="/scripts/reports/daily.js"></script>
+    <script src="/scripts/reports/unsprinted.js"></script>
     <script src="/scripts/reports/label-sync.js"></script>
     <script src="/scripts/reports/olka-deploy.js"></script>
     <script src="/scripts/reports/rfr.js"></script>

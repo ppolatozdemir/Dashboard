@@ -8,6 +8,7 @@ export const GLOBAL_ACCESS_TENANT = "CL";
 export const PAGES = Object.freeze({
   DAILY: "daily",
   CLOSED: "closed",
+  UNSPRINTED: "unsprinted",
   OLKA_DEPLOY: "olkaDeploy",
   RFR: "rfr",
   REJECT: "reject",
@@ -76,6 +77,7 @@ const TENANT_ADMIN_PAGES = Object.freeze([
 ]);
 
 const OLKA_PAGES = Object.freeze([
+  PAGES.UNSPRINTED,
   PAGES.LABEL_SYNC,
   PAGES.OLKA_DEPLOY,
   PAGES.OLKA_SPRINT,

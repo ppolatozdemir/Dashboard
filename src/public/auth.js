@@ -15,7 +15,7 @@
         OLKA: 'Olka'
     });
     const dashboardTabs = [
-        'daily', 'closed', 'olkaDeploy', 'rfr', 'reject',
+        'daily', 'closed', 'unsprinted', 'olkaDeploy', 'rfr', 'reject',
         'hdvStatus', 'olkaSprint', 'olkaRoadmap', 'labelSync', 'mcBoard',
         'project', 'createTask', 'tenantManagement'
     ];

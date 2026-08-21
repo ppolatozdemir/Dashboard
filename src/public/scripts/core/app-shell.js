@@ -77,7 +77,7 @@ function updateChartTheme() {
 initTheme();
 
 const DASHBOARD_TABS = [
-    'daily', 'closed', 'olkaDeploy', 'rfr', 'reject',
+    'daily', 'closed', 'unsprinted', 'olkaDeploy', 'rfr', 'reject',
     'hdvStatus', 'olkaSprint', 'olkaRoadmap', 'labelSync', 'mcBoard',
     'project', 'createTask', 'tenantManagement'
 ];
@@ -100,6 +100,10 @@ function loadTabContent(tab) {
     if (tab === 'closed') loadClosedReport();
     if (tab === 'createTask') loadTaskFormData();
     if (tab === 'tenantManagement') loadTenantManagement();
+    if (tab === 'unsprinted' && !unsprintedLoaded) {
+        unsprintedLoaded = true;
+        loadUnsprintedSprints();
+    }
 
     [
         { name: 'olkaDeploy', isLoaded: () => olkaDeployLoaded, markLoaded: () => { olkaDeployLoaded = true; }, load: loadOlkaDeployReport },
