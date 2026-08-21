@@ -67,6 +67,7 @@ test("page access follows the owner and tenant access plan", () => {
       PAGES.UNSPRINTED,
       PAGES.RFR,
       PAGES.REJECT,
+      PAGES.OLKA_SPRINT,
       PAGES.PROJECT_REPORT,
       PAGES.CREATE_TASK,
       PAGES.PROJECT_BOARD,
@@ -91,8 +92,8 @@ test("page access follows the owner and tenant access plan", () => {
     tenant: "HD",
   });
   assert.ok(hdAdminPages.includes(PAGES.HDV_STATUS));
+  assert.ok(hdAdminPages.includes(PAGES.OLKA_SPRINT));
   assert.ok(!hdAdminPages.includes(PAGES.OLKA_DEPLOY));
-  assert.ok(!hdAdminPages.includes(PAGES.OLKA_SPRINT));
 
   const otherAdminPages = getAccessiblePages({
     role: ROLES.TENANT_ADMIN,
@@ -102,6 +103,7 @@ test("page access follows the owner and tenant access plan", () => {
     PAGES.UNSPRINTED,
     PAGES.RFR,
     PAGES.REJECT,
+    PAGES.OLKA_SPRINT,
     PAGES.PROJECT_REPORT,
     PAGES.CREATE_TASK,
     PAGES.PROJECT_BOARD,
