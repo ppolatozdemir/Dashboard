@@ -54,7 +54,7 @@
         document.body.insertAdjacentHTML('afterbegin', `
             <div class="auth-overlay" id="authOverlay"${hideLoginOverlayDuringTenantSwitch ? ' hidden' : ''}>
                 <div class="auth-card">
-                    <h1>Jira Support Dashboard</h1>
+                    <h1>LAB Board</h1>
                     <p>Devam etmek için giriş yapın.</p>
                     <div class="auth-methods">
                         <button class="auth-method active" type="button" data-auth-method="company">CommerceLab ile giriş</button>

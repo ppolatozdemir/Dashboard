@@ -13,8 +13,10 @@ import { registerReportRoutes } from "./routes/report-routes.js";
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const publicDirectory = path.join(currentDirectory, "../public");
+const assetsDirectory = path.join(currentDirectory, "../../assets");
 
 function registerStaticAssets(app) {
+  app.use("/assets", express.static(assetsDirectory));
   app.use(
     express.static(publicDirectory, {
       setHeaders: (res, filePath) => {

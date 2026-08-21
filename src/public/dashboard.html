@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jira Support Dashboard</title>
+    <title>LAB Board</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <link rel="stylesheet" href="/auth.css?v=3">
@@ -23,7 +23,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>📊 Jira Support Dashboard</h1>
+        <h1>LAB Board</h1>
         <div class="header-controls">
             <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
                 <span class="icon" id="themeIcon">🌙</span>
@@ -35,8 +35,7 @@
     <!-- Tab Bar -->
     <nav class="tab-bar" aria-label="Dashboard bölümleri">
         <div class="sidebar-brand">
-            <span class="sidebar-brand-mark" aria-hidden="true">📊</span>
-            <span>Support Hub</span>
+            <img class="sidebar-brand-logo" src="/assets/LABBoard.png" alt="LAB Board">
         </div>
         <div class="sidebar-label">Raporlar ve işlemler</div>
         <button type="button" class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">📋 İş Yükü</button>
