@@ -1,5 +1,7 @@
 import supportReportService from "../../lib/support-report.js";
 import { taskProjectKeysFor } from "../../auth/task-policy.js";
+import authService from "../../auth/service.js";
+import { COMPANY_LOGIN_TENANTS, GLOBAL_ACCESS_TENANT } from "../../auth/constants.js";
 import { getConfig, isConfigured } from "../../lib/config.js";
 import {
   getHebiarClient,
@@ -17,19 +19,8 @@ export function configStatus(req, res) {
 export async function projects(req, res) {
   try {
     if (!requireConfiguration(res)) return;
-    const client = getHebiarClient();
+    const projects = await getJiraProjects();
     const allowedProjectKeys = new Set(taskProjectKeysFor(req.auth));
-    const projects = [];
-    let startAt = 0;
-    for (let page = 0; page < 50; page++) {
-      const response = await client.get("/project/search", {
-        params: { startAt, maxResults: 50, orderBy: "name" },
-      });
-      const values = response.data.values || [];
-      projects.push(...values);
-      if (response.data.isLast || values.length === 0) break;
-      startAt += values.length;
-    }
     res.json(
       projects
         .filter((project) => allowedProjectKeys.has(project.key))
@@ -41,6 +32,83 @@ export async function projects(req, res) {
     );
   } catch (error) {
     console.error("Proje listesi hatası:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function getJiraProjects() {
+  const client = getHebiarClient();
+  const projects = [];
+  let startAt = 0;
+  for (let page = 0; page < 50; page++) {
+    const response = await client.get("/project/search", {
+      params: { startAt, maxResults: 50, orderBy: "name" },
+    });
+    const values = response.data.values || [];
+    projects.push(...values);
+    if (response.data.isLast || values.length === 0) break;
+    startAt += values.length;
+  }
+  return projects;
+}
+
+export async function tenantProjects(req, res) {
+  try {
+    if (!requireConfiguration(res)) return;
+    const [jiraProjects, assignments] = await Promise.all([
+      getJiraProjects(),
+      Promise.resolve(authService.repository.listTenantProjects()),
+    ]);
+    const assignmentsByKey = new Map(
+      assignments.map((assignment) => [assignment.projectKey, assignment]),
+    );
+    res.json({
+      tenants: COMPANY_LOGIN_TENANTS.filter(
+        (tenant) => tenant !== GLOBAL_ACCESS_TENANT,
+      ),
+      projects: jiraProjects.map((project) => ({
+        key: project.key,
+        name: project.name,
+        tenant: assignmentsByKey.get(project.key)?.tenant || null,
+      })),
+    });
+  } catch (error) {
+    console.error("Tenant proje listesi hatası:", error.response?.data || error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+export async function updateTenantProjects(req, res) {
+  try {
+    if (!requireConfiguration(res)) return;
+    const tenant = String(req.params.tenant || "").trim().toUpperCase();
+    if (!COMPANY_LOGIN_TENANTS.includes(tenant) || tenant === GLOBAL_ACCESS_TENANT) {
+      return res.status(400).json({ error: "Geçerli bir üst tenant seçilmelidir" });
+    }
+    const projects = Array.isArray(req.body?.projects) ? req.body.projects : null;
+    if (!projects) {
+      return res.status(400).json({ error: "Proje listesi gerekli" });
+    }
+    const jiraProjects = await getJiraProjects();
+    const jiraProjectsByKey = new Map(
+      jiraProjects.map((project) => [project.key, project]),
+    );
+    const selected = [];
+    for (const key of projects) {
+      const project = jiraProjectsByKey.get(String(key || "").trim().toUpperCase());
+      if (!project) {
+        return res.status(400).json({ error: "Bilinmeyen Jira projesi seçildi" });
+      }
+      selected.push({ key: project.key, name: project.name });
+    }
+    const assignments = authService.repository.replaceTenantProjects(
+      tenant,
+      selected,
+      req.auth.id || req.auth.email,
+    );
+    res.json({ assignments });
+  } catch (error) {
+    console.error("Tenant proje güncelleme hatası:", error.message);
     res.status(500).json({ error: error.message });
   }
 }

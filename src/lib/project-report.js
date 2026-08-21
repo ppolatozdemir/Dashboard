@@ -163,7 +163,7 @@ class ProjectReportService {
    * Verilen sprint için proje bazlı task kırılımını (sayı + yüzde) döner.
    * sprintId verilmezse ilk (aktif ya da en yeni) sprint kullanılır.
    */
-  async getBreakdown(sprintId) {
+  async getBreakdown(sprintId, projectKeys = []) {
     const sprints = await this.getSprints();
 
     let target = sprintId
@@ -175,6 +175,7 @@ class ProjectReportService {
       return {
         sprint: null,
         sprints,
+        projectScopeCount: projectKeys.length,
         total: 0,
         completed: 0,
         remaining: 0,
@@ -183,10 +184,13 @@ class ProjectReportService {
       };
     }
 
-    const issues = await this._fetchAllSprintIssues(target.id, [
+    const allowedProjectKeys = new Set(
+      projectKeys.map((projectKey) => String(projectKey).toUpperCase()),
+    );
+    const issues = (await this._fetchAllSprintIssues(target.id, [
       "project",
       "status",
-    ]);
+    ])).filter((issue) => allowedProjectKeys.has(issue.fields?.project?.key));
 
     const map = this._groupProjects(issues);
     const total = issues.length;
@@ -201,6 +205,7 @@ class ProjectReportService {
         completeDate: target.completeDate || null,
       },
       sprints,
+      projectScopeCount: allowedProjectKeys.size,
       total,
       completed,
       remaining: total - completed,

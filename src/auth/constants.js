@@ -8,7 +8,6 @@ export const GLOBAL_ACCESS_TENANT = "CL";
 export const PAGES = Object.freeze({
   DAILY: "daily",
   CLOSED: "closed",
-  UNSPRINTED: "unsprinted",
   OLKA_DEPLOY: "olkaDeploy",
   RFR: "rfr",
   REJECT: "reject",
@@ -19,6 +18,7 @@ export const PAGES = Object.freeze({
   PROJECT_BOARD: "mcBoard",
   PROJECT_REPORT: "project",
   CREATE_TASK: "createTask",
+  TENANT_MANAGEMENT: "tenantManagement",
 });
 
 export const COMPANY_LOGIN_TENANTS = Object.freeze([
@@ -45,7 +45,7 @@ export const COMPANY_TENANT_SCOPES = Object.freeze({
   HD: Object.freeze(["HDV"]),
 });
 
-const TASK_PROJECT_KEYS_BY_TENANT = Object.freeze({
+export const TENANT_PROJECT_SEED = Object.freeze({
   OLKA: Object.freeze(["OLK", "KLA", "ASCS", "SKCH"]),
   MCC: Object.freeze(["MC", "IMC"]),
   SCH: Object.freeze(["SOCH"]),
@@ -70,23 +70,16 @@ const TASK_TENANT_ALIASES = Object.freeze({
 const TENANT_ADMIN_PAGES = Object.freeze([
   PAGES.RFR,
   PAGES.REJECT,
-  PAGES.OLKA_SPRINT,
   PAGES.PROJECT_REPORT,
   PAGES.CREATE_TASK,
   PAGES.PROJECT_BOARD,
 ]);
 
-const OWNER_ADMIN_PAGES = Object.freeze([
-  PAGES.DAILY,
-  PAGES.CLOSED,
-  ...TENANT_ADMIN_PAGES,
-]);
-
 const OLKA_PAGES = Object.freeze([
   PAGES.LABEL_SYNC,
   PAGES.OLKA_DEPLOY,
+  PAGES.OLKA_SPRINT,
   PAGES.OLKA_ROADMAP,
-  PAGES.UNSPRINTED
 ]);
 
 function normalizeCompanyTenant(tenant) {
@@ -95,16 +88,24 @@ function normalizeCompanyTenant(tenant) {
 
 export function getAccessiblePages(actor) {
   const tenant = normalizeCompanyTenant(actor?.tenant);
+  const isCommerceLab = tenant === GLOBAL_ACCESS_TENANT;
+  const dailyPages = isCommerceLab ? [PAGES.DAILY, PAGES.CLOSED] : [];
   if (actor?.role === ROLES.OWNER_ADMIN) {
     return [
-      ...OWNER_ADMIN_PAGES,
+      ...dailyPages,
+      ...TENANT_ADMIN_PAGES,
+      ...(isCommerceLab
+        ? [PAGES.OLKA_SPRINT, PAGES.TENANT_MANAGEMENT]
+        : []),
       ...(tenant === "OLKA" ? OLKA_PAGES : []),
       ...(tenant === "HD" ? [PAGES.HDV_STATUS] : []),
     ];
   }
   if (actor?.role !== ROLES.TENANT_ADMIN) return [];
   return [
+    ...dailyPages,
     ...TENANT_ADMIN_PAGES,
+    ...(isCommerceLab ? [PAGES.OLKA_SPRINT] : []),
     ...(tenant === "OLKA" ? OLKA_PAGES : []),
     ...(tenant === "HD" ? [PAGES.HDV_STATUS] : []),
   ];
@@ -140,21 +141,9 @@ export function getCompanyTenantOptions(availableTenants) {
   );
 }
 
-export function getTaskProjectKeys(tenant) {
+export function getTenantProjectScope(tenant) {
   const normalizedTenant = normalizeCompanyTenant(tenant);
-  if (normalizedTenant === GLOBAL_ACCESS_TENANT) {
-    return Object.freeze(
-      [...new Set(Object.values(TASK_PROJECT_KEYS_BY_TENANT).flat())].sort(),
-    );
-  }
-  const mappedTenant = TASK_TENANT_ALIASES[normalizedTenant] || normalizedTenant;
-  return TASK_PROJECT_KEYS_BY_TENANT[mappedTenant] || Object.freeze([]);
-}
-
-export function canCreateTaskInProject(tenant, projectKey) {
-  return getTaskProjectKeys(tenant).includes(
-    String(projectKey || "").trim().toUpperCase(),
-  );
+  return TASK_TENANT_ALIASES[normalizedTenant] || normalizedTenant;
 }
 
 export const CLAIMS = Object.freeze({

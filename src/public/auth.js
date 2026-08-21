@@ -15,9 +15,9 @@
         OLKA: 'Olka'
     });
     const dashboardTabs = [
-        'daily', 'closed', 'unsprinted', 'olkaDeploy', 'rfr', 'reject',
+        'daily', 'closed', 'olkaDeploy', 'rfr', 'reject',
         'hdvStatus', 'olkaSprint', 'olkaRoadmap', 'labelSync', 'mcBoard',
-        'project', 'createTask'
+        'project', 'createTask', 'tenantManagement'
     ];
     const hideLoginOverlayDuringTenantSwitch =
         sessionStorage.getItem('dashboard-tenant-switch') === 'true';
@@ -329,6 +329,7 @@
 
     function renderAuthenticatedUi(user) {
         currentUser = user;
+        window.dashboardCurrentUser = user;
         window.dashboardLoader.setActiveTenant(user.tenant);
         document.getElementById('authOverlay').hidden = true;
         const controls = document.querySelector('.header-controls');

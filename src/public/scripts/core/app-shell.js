@@ -1,6 +1,16 @@
 let currentReport = null;
 let charts = {};
 
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Theme Management
 function initTheme() {
     const savedTheme = localStorage.getItem('dashboard-theme') || 'dark';
@@ -67,9 +77,9 @@ function updateChartTheme() {
 initTheme();
 
 const DASHBOARD_TABS = [
-    'daily', 'closed', 'unsprinted', 'olkaDeploy', 'rfr', 'reject',
+    'daily', 'closed', 'olkaDeploy', 'rfr', 'reject',
     'hdvStatus', 'olkaSprint', 'olkaRoadmap', 'labelSync', 'mcBoard',
-    'project', 'createTask'
+    'project', 'createTask', 'tenantManagement'
 ];
 
 function updateActiveTab(tab) {
@@ -89,9 +99,9 @@ function loadTabOnce(tab, state) {
 function loadTabContent(tab) {
     if (tab === 'closed') loadClosedReport();
     if (tab === 'createTask') loadTaskFormData();
+    if (tab === 'tenantManagement') loadTenantManagement();
 
     [
-        { name: 'unsprinted', isLoaded: () => unsprintedSprintsLoaded, markLoaded: () => { unsprintedSprintsLoaded = true; }, load: loadUnsprintedSprints },
         { name: 'olkaDeploy', isLoaded: () => olkaDeployLoaded, markLoaded: () => { olkaDeployLoaded = true; }, load: loadOlkaDeployReport },
         { name: 'rfr', isLoaded: () => rfrLoaded, markLoaded: () => { rfrLoaded = true; }, load: loadRfrReport },
         { name: 'reject', isLoaded: () => rejectLoaded, markLoaded: () => { rejectLoaded = true; }, load: loadRejectReport },

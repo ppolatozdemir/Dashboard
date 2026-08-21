@@ -1,10 +1,6 @@
 import * as reports from "../controllers/report-controller.js";
 
 export function registerReportRoutes(app) {
-  app.get("/api/unsprinted/olka-sprints", reports.olkaUnsprintedSprints);
-  app.get("/api/unsprinted/hebiar-sprints", reports.hebiarUnsprintedSprints);
-  app.get("/api/unsprinted/report", reports.unsprintedReport);
-  app.post("/api/unsprinted/export", reports.exportUnsprinted);
   app.get("/api/olka-deploy/report", reports.olkaDeployReport);
   app.post("/api/olka-deploy/export", reports.exportOlkaDeploy);
   app.get("/api/rfr/report", reports.rfrReport);
@@ -20,6 +16,7 @@ export function registerReportRoutes(app) {
   app.post("/api/project-report/export", reports.exportProjectReport);
   app.post("/api/label-sync/run", reports.syncLabels);
   app.get("/api/mc-board/report", reports.mcBoardReport);
+  app.get("/api/mc-board/projects", reports.tenantBoardProjects);
   app.get("/api/olka-roadmap/report", reports.olkaRoadmapReport);
   app.post("/api/olka-roadmap/export", reports.exportOlkaRoadmap);
 }

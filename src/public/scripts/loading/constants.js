@@ -15,7 +15,7 @@
             HFV: `${emblemBasePath}/OLKA.png`,
             HTR: `${emblemBasePath}/OLKA.png`,
             KLD: `${emblemBasePath}/OLKA.png`,
-            MCC: `${emblemBasePath}/mcc.png`,
+            MCC: `${emblemBasePath}/MCC.png`,
             SCH: `${emblemBasePath}/SCH.png`,
             A101: `${emblemBasePath}/A101.png`,
             GRC: `${emblemBasePath}/GB.png`,

@@ -4,8 +4,8 @@ import { getConfig } from "./config.js";
 /**
  * "Reject Takip" raporu:
  * Hebiar (Commercelab) Jira'sında statüsü "Reject" / "REJECT" veya "Returned"
- * olan maddeleri, HDV (HDHOLDING) projesi HARİÇ tüm projelerde listeler ve PROJE
- * bazında gruplar. Sol panelde proje listesi, sağda seçilen projenin maddeleri.
+ * olan maddeleri, çağıranın yetkili proje anahtarlarında listeler ve proje bazında
+ * gruplar. Sol panelde proje listesi, sağda seçilen projenin maddeleri.
  *
  * Not: Hebiar sabit URL'dir; config.baseUrl Olka'yı göstersede bile bu rapor daima
  * Hebiar'a bağlanır (HEBIAR_BASE_URL ile override edilebilir).
@@ -14,10 +14,10 @@ import { getConfig } from "./config.js";
 const HEBIAR_BASE_URL = (
   process.env.HEBIAR_BASE_URL || "https://hebiar.atlassian.net"
 ).replace(/\/$/, "");
-// Hariç tutulacak proje anahtar(lar)ı (varsayılan: HDV). Virgülle çoğaltılabilir.
-const EXCLUDED_PROJECTS = (process.env.REJECT_EXCLUDE_PROJECTS || "HDV")
+// İsteğe bağlı olarak hariç tutulacak proje anahtarları.
+const EXCLUDED_PROJECTS = (process.env.REJECT_EXCLUDE_PROJECTS || "")
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => s.trim().toUpperCase())
   .filter(Boolean);
 
 // Rapora dahil edilecek statüler: adı bu desene uyanlar. Varsayılan olarak
@@ -30,7 +30,7 @@ const STATUS_PATTERN = new RegExp(
 // Statü API'si erişilemezse kullanılacak güvenli varsayılan statü adları.
 const FALLBACK_STATUSES = ["Reject", "REJECT", "Returned"];
 
-class RejectReportService {
+export class RejectReportService {
   getAuthHeader() {
     const { email, apiToken } = getConfig();
     if (!email || !apiToken) {
@@ -96,11 +96,11 @@ class RejectReportService {
   }
 
   /**
-   * Hebiar'daki (kullanıcının görebildiği) TÜM projeleri çeker. HDV hariç.
+   * Hebiar'daki projelerden yalnız izinli proje anahtarlarını çeker.
    * project/search endpoint'i startAt tabanlı sayfalıdır (isLast'a kadar döner).
    * Sol panelde reject'i olmayan projeler de (0 sayısıyla) görünsün diye kullanılır.
    */
-  async _getAllProjects() {
+  async _getAllProjects(projectKeys) {
     const headers = this.getAuthHeader();
     const all = [];
     let startAt = 0;
@@ -117,16 +117,36 @@ class RejectReportService {
       startAt += values.length;
     }
 
+    const allowed = new Set(projectKeys);
     return all
       .map((p) => ({ key: p.key, name: p.name || p.key }))
-      .filter((p) => !EXCLUDED_PROJECTS.includes(p.key));
+      .filter((p) => allowed.has(p.key));
   }
 
   /**
    * Statüsü reddedilen/iade edilen (Reject/REJECT/Returned) Hebiar maddelerini,
-   * HDV hariç tüm projelerden çeker ve proje bazlı özet + satır listesi döner.
+   * yalnız izinli projelerden çeker ve proje bazlı özet + satır listesi döner.
    */
-  async getRejectTasks() {
+  async getRejectTasks(projectKeys = []) {
+    const allowedProjectKeys = [
+      ...new Set(
+        projectKeys
+          .map((key) => String(key || "").trim().toUpperCase())
+          .filter((key) => key && !EXCLUDED_PROJECTS.includes(key)),
+      ),
+    ].sort();
+    if (allowedProjectKeys.length === 0) {
+      return {
+        statuses: [...FALLBACK_STATUSES],
+        excludedProjects: EXCLUDED_PROJECTS,
+        count: 0,
+        projectCount: 0,
+        rejectProjectCount: 0,
+        generatedAt: new Date().toISOString(),
+        projects: [],
+        rows: [],
+      };
+    }
     const fields = [
       "summary",
       "status",
@@ -140,9 +160,8 @@ class RejectReportService {
 
     const statusNames = await this._getRejectStatusNames();
     const statusClause = statusNames.map((n) => `"${n}"`).join(", ");
-    const excludeClause = EXCLUDED_PROJECTS.map((p) => `"${p}"`).join(", ");
-
-    const baseJql = `status in (${statusClause}) AND project not in (${excludeClause})`;
+    const projectClause = allowedProjectKeys.map((key) => `"${key}"`).join(", ");
+    const baseJql = `project in (${projectClause}) AND status in (${statusClause})`;
     const jql = `${baseJql} ORDER BY project ASC, key ASC`;
 
     let issues;
@@ -162,11 +181,10 @@ class RejectReportService {
       return (a.key || "").localeCompare(b.key || "", "tr", { numeric: true });
     });
 
-    // Proje bazlı özet — sol panelde Hebiar'daki TÜM projeler (HDV hariç)
-    // görünsün diye önce tüm projeler 0 ile eklenir, sonra reject sayıları işlenir.
+    // Proje bazlı özet — izinli projeler reject kaydı olmasa da 0 ile görünür.
     let allProjects = [];
     try {
-      allProjects = await this._getAllProjects();
+      allProjects = await this._getAllProjects(allowedProjectKeys);
     } catch (err) {
       allProjects = [];
     }
@@ -264,7 +282,7 @@ class RejectReportService {
     // 1. satır: Başlık
     ws.mergeCells(`A1:${LAST_COL}1`);
     const titleCell = ws.getCell("A1");
-    titleCell.value = "Reject Takip — Reddedilen / İade Edilen Maddeler (HDV Hariç)";
+    titleCell.value = "Reject Takip — Reddedilen / İade Edilen Maddeler";
     titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
     titleCell.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     titleCell.fill = {

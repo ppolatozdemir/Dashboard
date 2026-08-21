@@ -37,7 +37,6 @@ function registerAuthorization(app) {
   const pageRoutes = [
     ["/api/daily-report", PAGES.DAILY],
     ["/api/daily-closed", PAGES.CLOSED],
-    ["/api/unsprinted", PAGES.UNSPRINTED],
     ["/api/olka-deploy", PAGES.OLKA_DEPLOY],
     ["/api/rfr", PAGES.RFR],
     ["/api/reject", PAGES.REJECT],
@@ -51,6 +50,7 @@ function registerAuthorization(app) {
     ["/api/projects", PAGES.CREATE_TASK],
     ["/api/all-sprints", PAGES.CREATE_TASK],
     ["/api/users", PAGES.CREATE_TASK],
+    ["/api/tenant-projects", PAGES.TENANT_MANAGEMENT],
   ];
   pageRoutes.forEach(([route, page]) => {
     app.use(route, authService.requirePageAccess(page));

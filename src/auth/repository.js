@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { hashToken } from "./credentials.js";
 import { publicUser } from "./normalization.js";
+import { TENANT_PROJECT_SEED, getTenantProjectScope } from "./constants.js";
 
 export class AuthRepository {
   constructor(dbPath) {
@@ -57,7 +58,22 @@ export class AuthRepository {
         active_tenant TEXT,
         expires_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS auth_tenant_projects (
+        project_key TEXT PRIMARY KEY COLLATE NOCASE,
+        tenant TEXT NOT NULL COLLATE NOCASE,
+        project_name TEXT NOT NULL,
+        updated_by TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS auth_tenant_projects_tenant
+        ON auth_tenant_projects(tenant);
+      CREATE TABLE IF NOT EXISTS auth_schema_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
+    this.seedTenantProjects();
     const companySessionColumns = this.db
       .prepare("PRAGMA table_info(auth_company_sessions)")
       .all();
@@ -114,6 +130,103 @@ export class AuthRepository {
       }
     }
     this.db.prepare("DELETE FROM auth_users WHERE role = 'TenantUser'").run();
+  }
+
+  seedTenantProjects() {
+    const seedKey = "tenant_projects_seed_v1";
+    if (
+      this.db
+        .prepare("SELECT 1 FROM auth_schema_settings WHERE key = ?")
+        .get(seedKey)
+    ) {
+      return;
+    }
+    const now = new Date().toISOString();
+    const seed = this.db.transaction(() => {
+      const insert = this.db.prepare(
+        `INSERT OR IGNORE INTO auth_tenant_projects (
+          project_key, tenant, project_name, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      for (const [tenant, projectKeys] of Object.entries(TENANT_PROJECT_SEED)) {
+        for (const projectKey of projectKeys) {
+          insert.run(projectKey, tenant, projectKey, "system-seed", now, now);
+        }
+      }
+      this.db
+        .prepare("INSERT INTO auth_schema_settings (key, value) VALUES (?, ?)")
+        .run(seedKey, now);
+    });
+    seed();
+  }
+
+  getTenantProjectKeys(tenant) {
+    const scope = getTenantProjectScope(tenant);
+    const rows =
+      scope === "CL"
+        ? this.db
+            .prepare(
+              "SELECT project_key FROM auth_tenant_projects ORDER BY project_key",
+            )
+            .all()
+        : this.db
+            .prepare(
+              "SELECT project_key FROM auth_tenant_projects WHERE tenant = ? ORDER BY project_key",
+            )
+            .all(scope);
+    return rows.map((row) => row.project_key);
+  }
+
+  listTenantProjects() {
+    return this.db
+      .prepare(
+        `SELECT project_key AS projectKey, tenant, project_name AS projectName,
+                updated_by AS updatedBy, created_at AS createdAt, updated_at AS updatedAt
+         FROM auth_tenant_projects
+         ORDER BY tenant, project_key`,
+      )
+      .all();
+  }
+
+  replaceTenantProjects(tenant, projects, actor) {
+    const scope = getTenantProjectScope(tenant);
+    if (scope === "CL") throw new Error("CL tenantına proje atanamaz");
+    const now = new Date().toISOString();
+    const normalized = [...new Map(
+      projects.map((project) => [
+        String(project.key || "").trim().toUpperCase(),
+        {
+          key: String(project.key || "").trim().toUpperCase(),
+          name: String(project.name || project.key || "").trim(),
+        },
+      ]),
+    ).values()].filter((project) => project.key);
+    this.db.transaction(() => {
+      this.db
+        .prepare("DELETE FROM auth_tenant_projects WHERE tenant = ?")
+        .run(scope);
+      const insert = this.db.prepare(
+        `INSERT INTO auth_tenant_projects (
+          project_key, tenant, project_name, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_key) DO UPDATE SET
+          tenant = excluded.tenant,
+          project_name = excluded.project_name,
+          updated_by = excluded.updated_by,
+          updated_at = excluded.updated_at`,
+      );
+      for (const project of normalized) {
+        insert.run(
+          project.key,
+          scope,
+          project.name || project.key,
+          actor || null,
+          now,
+          now,
+        );
+      }
+    })();
+    return this.listTenantProjects();
   }
 
   migrateUsersToEmailIdentity() {

@@ -1,6 +1,49 @@
+const TENANT_NAMES = Object.freeze({
+    OLKA: 'Olka',
+    MCC: 'Madame Coco',
+    SCH: 'SoChic',
+    A101: 'A-101',
+    GRC: 'Grace Brands',
+    MRDIY: 'Mr. DIY',
+    DEC: 'Decathlon',
+    HD: 'HD',
+    CL: 'CommerceLAB'
+});
+
+let tenantBoardProjects = [];
+
+async function loadTenantBoardProjects() {
+    const select = document.getElementById('tenantBoardProjectSelect');
+    const title = document.getElementById('tenantBoardTitle');
+    const tenant = window.dashboardCurrentUser?.tenant || '';
+    if (title) title.textContent = `🗂️ ${TENANT_NAMES[tenant] || tenant || 'Tenant'} Panosu`;
+    try {
+        const response = await fetch('/api/projects');
+        const projects = await response.json().catch(() => []);
+        if (!response.ok) throw new Error(projects.error || 'Projeler alınamadı');
+        tenantBoardProjects = Array.isArray(projects) ? projects : [];
+        select.innerHTML = tenantBoardProjects.length
+            ? tenantBoardProjects.map(project =>
+                `<option value="${escapeHtml(project.key)}">${escapeHtml(project.name)} (${escapeHtml(project.key)})</option>`
+            ).join('')
+            : '<option value="">Bu tenant için proje tanımlı değil</option>';
+        select.disabled = tenantBoardProjects.length === 0;
+        return tenantBoardProjects[0]?.key || null;
+    } catch (error) {
+        select.innerHTML = '<option value="">Projeler alınamadı</option>';
+        select.disabled = true;
+        throw error;
+    }
+}
+
+async function onTenantBoardProjectChange() {
+    await loadMcBoardReport();
+}
+
 async function loadMcBoardReport() {
     const el = document.getElementById('mcBoardContent');
     const bar = document.getElementById('mcBoardInfoBar');
+    const select = document.getElementById('tenantBoardProjectSelect');
     bar.innerHTML = '';
     el.innerHTML = `
         <div class="loading" style="height: 150px;">
@@ -9,7 +52,12 @@ async function loadMcBoardReport() {
         </div>
     `;
     try {
-        const res = await fetch('/api/mc-board/report');
+        const projectKey = select?.value || await loadTenantBoardProjects();
+        if (!projectKey) {
+            el.innerHTML = '<div class="mc-empty">Bu tenant için proje tanımlı değil.</div>';
+            return;
+        }
+        const res = await fetch(`/api/mc-board/report?projectKey=${encodeURIComponent(projectKey)}`);
         if (!res.ok) throw new Error((await res.json()).error || 'Pano alınamadı');
         const data = await res.json();
         lastMcBoardData = data;
