@@ -138,7 +138,7 @@ function mcPriorityIcon(name) {
     return '⚪';
 }
 
-// ========== Olka Sprint Rapor ==========
+// ========== Sprint Raporu ==========
 let olkaSprintLoaded = false;
 let lastOlkaSprintData = null;
 

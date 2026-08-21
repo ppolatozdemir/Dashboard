@@ -81,6 +81,7 @@ test("page access follows the owner and tenant access plan", () => {
   assert.ok(olkaAdminPages.includes(PAGES.PROJECT_BOARD));
   assert.ok(olkaAdminPages.includes(PAGES.LABEL_SYNC));
   assert.ok(olkaAdminPages.includes(PAGES.OLKA_DEPLOY));
+  assert.ok(olkaAdminPages.includes(PAGES.OLKA_SPRINT));
   assert.ok(olkaAdminPages.includes(PAGES.OLKA_ROADMAP));
   assert.ok(!olkaAdminPages.includes(PAGES.DAILY));
   assert.ok(!olkaAdminPages.includes(PAGES.HDV_STATUS));
@@ -91,6 +92,7 @@ test("page access follows the owner and tenant access plan", () => {
   });
   assert.ok(hdAdminPages.includes(PAGES.HDV_STATUS));
   assert.ok(!hdAdminPages.includes(PAGES.OLKA_DEPLOY));
+  assert.ok(!hdAdminPages.includes(PAGES.OLKA_SPRINT));
 
   const otherAdminPages = getAccessiblePages({
     role: ROLES.TENANT_ADMIN,

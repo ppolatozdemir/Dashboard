@@ -2,7 +2,7 @@ import axios from "axios";
 import { getConfig } from "./config.js";
 
 /**
- * "Olka Sprint Rapor" raporu:
+ * "Sprint Raporu" raporu:
  * Hebiar (Commercelab) Jira'sındaki weekly board'un EN SON KAPANAN sprintini alır
  * ve o sprintteki OLK ve SKCH maddelerini üç gruba ayırarak listeler:
  *   - Tamamlananlar (Ready For Release, QA Testing, Test, Merge, Merged + "Tamamlandı"
@@ -328,7 +328,7 @@ class OlkaSprintReportService {
 
     sum.mergeCells("A1:E1");
     const t1 = sum.getCell("A1");
-    t1.value = "Olka Sprint Rapor — Özet";
+    t1.value = "Sprint Raporu — Özet";
     t1.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
     t1.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     t1.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };
@@ -466,7 +466,7 @@ class OlkaSprintReportService {
 
     ws.mergeCells(`A1:${LAST_COL}1`);
     const mt = ws.getCell("A1");
-    mt.value = `Olka Sprint Rapor — ${sprintName}`;
+    mt.value = `Sprint Raporu — ${sprintName}`;
     mt.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
     mt.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
     mt.fill = { type: "pattern", pattern: "solid", fgColor: { argb: NAVY } };

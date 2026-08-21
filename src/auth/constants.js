@@ -63,6 +63,7 @@ const OWNER_ADMIN_PAGES = Object.freeze([
 const OLKA_PAGES = Object.freeze([
   PAGES.LABEL_SYNC,
   PAGES.OLKA_DEPLOY,
+  PAGES.OLKA_SPRINT,
   PAGES.OLKA_ROADMAP,
 ]);
 

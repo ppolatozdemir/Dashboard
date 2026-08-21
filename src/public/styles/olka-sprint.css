@@ -1,4 +1,4 @@
-/* Olka Sprint Rapor */
+/* Sprint Raporu */
 .osr-columns {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
