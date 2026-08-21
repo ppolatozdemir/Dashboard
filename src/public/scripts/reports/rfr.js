@@ -1,3 +1,6 @@
+let selectedRfrProject = '__all__';
+const rfrSort = { key: 'assignee', direction: 1 };
+
 async function loadRfrReport() {
     const peopleEl = document.getElementById('rfrPeopleList');
     const tableEl = document.getElementById('rfrTableContent');
@@ -17,8 +20,10 @@ async function loadRfrReport() {
         if (!res.ok) throw new Error((await res.json()).error || 'Rapor alınamadı');
         const data = await res.json();
         lastRfrData = data;
-        selectedRfrPerson = null;
+        selectedRfrPerson = '__all__';
+        selectedRfrProject = '__all__';
         
+        populateRfrFilters();
         renderRfrInfo();
         renderRfrPeople();
         renderRfrTable();
@@ -31,6 +36,33 @@ async function loadRfrReport() {
             </div>
         `;
     }
+}
+
+function populateRfrFilters() {
+    const personSelect = document.getElementById('rfrPersonFilter');
+    const projectSelect = document.getElementById('rfrProjectFilter');
+    if (!lastRfrData || !personSelect || !projectSelect) return;
+    personSelect.innerHTML = [
+        '<option value="__all__">Tümü</option>',
+        ...(lastRfrData.people || []).map(person =>
+            `<option value="${escapeHtml(person.name)}">${escapeHtml(person.name)} (${person.count})</option>`
+        )
+    ].join('');
+    projectSelect.innerHTML = [
+        '<option value="__all__">Tümü</option>',
+        ...(lastRfrData.projects || []).map(project =>
+            `<option value="${escapeHtml(project.key)}">${escapeHtml(project.name)} (${project.count})</option>`
+        )
+    ].join('');
+    personSelect.value = selectedRfrPerson;
+    projectSelect.value = selectedRfrProject;
+}
+
+function onRfrFilterChange() {
+    selectedRfrPerson = document.getElementById('rfrPersonFilter')?.value || '__all__';
+    selectedRfrProject = document.getElementById('rfrProjectFilter')?.value || '__all__';
+    renderRfrPeople();
+    renderRfrTable();
 }
 
 function renderRfrInfo() {
@@ -81,6 +113,8 @@ function renderRfrPeople() {
 
 function selectRfrPerson(name) {
     selectedRfrPerson = name;
+    const select = document.getElementById('rfrPersonFilter');
+    if (select) select.value = name;
     renderRfrPeople();
     renderRfrTable();
 }
@@ -88,9 +122,12 @@ function selectRfrPerson(name) {
 // Seçili kişiye göre görünen satırları döndürür
 function getFilteredRfrRows() {
     if (!lastRfrData || !lastRfrData.rows) return [];
-    if (selectedRfrPerson === null) return [];              // henüz kişi seçilmedi -> boş
-    if (selectedRfrPerson === '__all__') return lastRfrData.rows;
-    return lastRfrData.rows.filter(r => (r.assignee || 'Atanmamış') === selectedRfrPerson);
+    const rows = lastRfrData.rows.filter(r => {
+        if (selectedRfrPerson !== '__all__' && (r.assignee || 'Atanmamış') !== selectedRfrPerson) return false;
+        if (selectedRfrProject !== '__all__' && r.projectKey !== selectedRfrProject) return false;
+        return true;
+    });
+    return sortReportRows(rows, rfrSort);
 }
 
 function formatRfrDate(iso) {
@@ -104,17 +141,6 @@ function formatRfrDate(iso) {
 function renderRfrTable() {
     const tableEl = document.getElementById('rfrTableContent');
     if (!lastRfrData) return;
-    
-    // Henüz bir kişi seçilmediyse task listesi yerine yönlendirme mesajı göster
-    if (selectedRfrPerson === null) {
-        tableEl.innerHTML = `
-            <div class="rfr-empty">
-                👈 Soldaki listeden bir <strong>kişi</strong> seçin; o kişinin RFR taskları burada listelensin.<br>
-                Tüm taskları görmek için <strong>"📋 Tümü"</strong>ne tıklayın.
-            </div>
-        `;
-        return;
-    }
     
     const rows = getFilteredRfrRows();
     
@@ -131,12 +157,13 @@ function renderRfrTable() {
         <table class="rfr-table">
             <thead>
                 <tr>
-                    <th>Atanan Kişi</th>
-                    <th>Task Kodu</th>
-                    <th>Task Özet</th>
-                    <th>Statü</th>
-                    <th>Son Statü Güncelleme Tarihi</th>
-                    <th>Kaç Gündür RFR'de</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'projectName', renderRfrTable)">Proje${reportSortIndicator(rfrSort, 'projectName')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'assignee', renderRfrTable)">Atanan Kişi${reportSortIndicator(rfrSort, 'assignee')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'key', renderRfrTable)">Task Kodu${reportSortIndicator(rfrSort, 'key')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'summary', renderRfrTable)">Task Özet${reportSortIndicator(rfrSort, 'summary')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'statusName', renderRfrTable)">Statü${reportSortIndicator(rfrSort, 'statusName')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'rfrSince', renderRfrTable)">Son Statü Güncelleme Tarihi${reportSortIndicator(rfrSort, 'rfrSince')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rfrSort, 'daysInRfr', renderRfrTable)">Kaç Gündür RFR'de${reportSortIndicator(rfrSort, 'daysInRfr')}</th>
                 </tr>
             </thead>
             <tbody>
@@ -148,6 +175,7 @@ function renderRfrTable() {
         const overdueTag = r.overdue ? '<span class="rfr-overdue-tag">1 AY+</span>' : '';
         tableHTML += `
             <tr class="${r.overdue ? 'rfr-overdue' : ''}">
+                <td>${escapeHtml(r.projectName || r.projectKey)}</td>
                 <td>${r.assignee ? escapeHtml(r.assignee) : '<span style="color: var(--text-muted);">Atanmamış</span>'}</td>
                 <td>${keyLink}</td>
                 <td>${escapeHtml(r.summary)}</td>
@@ -174,7 +202,7 @@ async function exportRfrExcel() {
     }
     
     // Kişi seçilmediyse tüm taskları, seçildiyse yalnızca o kişinin tasklarını aktar
-    const rows = selectedRfrPerson === null ? lastRfrData.rows : getFilteredRfrRows();
+    const rows = getFilteredRfrRows();
     const btn = document.getElementById('exportRfrBtn');
     const oldText = btn ? btn.textContent : null;
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...'; }

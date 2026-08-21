@@ -29,6 +29,7 @@
 .osr-col.completed .osr-col-header { background: rgba(76,175,80,0.18); color: var(--accent-green); }
 .osr-col.remaining .osr-col-header { background: rgba(255,159,28,0.18); color: var(--accent-orange); }
 .osr-col.blocked .osr-col-header { background: rgba(230,57,70,0.18); color: var(--accent-red); }
+.osr-col.customerAction .osr-col-header { background: rgba(126,34,206,0.18); color: #a855f7; }
 
 .osr-col-count {
     font-size: 13px;

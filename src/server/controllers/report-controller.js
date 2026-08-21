@@ -30,6 +30,55 @@ async function runConfigured(res, label, operation) {
   }
 }
 
+export function olkaUnsprintedSprints(req, res) {
+  return runConfigured(res, "Olka sprint listesi hatası", async () => {
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    res.json(await service.getOlkaSprints());
+  });
+}
+
+export function hebiarUnsprintedSprints(req, res) {
+  return runConfigured(res, "Hebiar sprint listesi hatası", async () => {
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    res.json(await service.getHebiarSprints());
+  });
+}
+
+export function unsprintedReport(req, res) {
+  return runConfigured(res, "Sprinte alınmayan rapor hatası", async () => {
+    const { olkaSprintId, hebiarSprintId } = req.query;
+    if (!olkaSprintId || !hebiarSprintId) {
+      return res
+        .status(400)
+        .json({ error: "Olka ve Hebiar sprint seçimi zorunludur" });
+    }
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    res.json(await service.getUnsprintedTasks(olkaSprintId, hebiarSprintId));
+  });
+}
+
+export function exportUnsprinted(req, res) {
+  return runConfigured(res, "Sprinte alınmayan Excel export hatası", async () => {
+    const { rows, olkaSprintName, hebiarSprintName, olkaTotal, hebiarTotal } =
+      req.body || {};
+    if (!validateRows(res, rows)) return;
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    const buffer = await service.buildUnsprintedXlsxBuffer(rows, {
+      olkaSprintName,
+      hebiarSprintName,
+      olkaTotal,
+      hebiarTotal,
+    });
+    const safe = (text) =>
+      (text || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
+    sendXlsx(
+      res,
+      buffer,
+      `sprinte-alinmayan_${safe(olkaSprintName) || "olka"}_vs_${safe(hebiarSprintName) || "hebiar"}_${dateStamp()}.xlsx`,
+    );
+  });
+}
+
 export function olkaDeployReport(req, res) {
   return runConfigured(res, "Olka Deploy rapor hatası", async () => {
     const service = (await import("../../lib/olka-deploy-report.js")).default;
@@ -50,7 +99,7 @@ export function exportOlkaDeploy(req, res) {
 export function rfrReport(req, res) {
   return runConfigured(res, "RFR Takip rapor hatası", async () => {
     const service = (await import("../../lib/rfr-report.js")).default;
-    res.json(await service.getRfrTasks());
+    res.json(await service.getRfrTasks(authorizedProjectKeys(req)));
   });
 }
 
@@ -58,8 +107,12 @@ export function exportRfr(req, res) {
   return runConfigured(res, "RFR Takip Excel export hatası", async () => {
     const { rows, status, overdueDays } = req.body || {};
     if (!validateRows(res, rows)) return;
+    const allowedProjectKeys = new Set(authorizedProjectKeys(req));
+    const scopedRows = rows.filter((row) =>
+      allowedProjectKeys.has(String(row.projectKey || "").trim().toUpperCase()),
+    );
     const service = (await import("../../lib/rfr-report.js")).default;
-    const buffer = await service.buildRfrXlsxBuffer(rows, {
+    const buffer = await service.buildRfrXlsxBuffer(scopedRows, {
       status,
       overdueDays,
     });
@@ -111,7 +164,12 @@ export function exportHdvStatus(req, res) {
 export function olkaSprintReport(req, res) {
   return runConfigured(res, "Sprint Raporu hatası", async () => {
     const service = (await import("../../lib/olka-sprint-report.js")).default;
-    res.json(await service.getSprintReport(req.query.sprintId));
+    res.json(
+      await service.getSprintReport(
+        req.query.sprintId,
+        authorizedProjectKeys(req),
+      ),
+    );
   });
 }
 

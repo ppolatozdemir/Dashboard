@@ -37,6 +37,7 @@ function registerAuthorization(app) {
   const pageRoutes = [
     ["/api/daily-report", PAGES.DAILY],
     ["/api/daily-closed", PAGES.CLOSED],
+    ["/api/unsprinted", PAGES.UNSPRINTED],
     ["/api/olka-deploy", PAGES.OLKA_DEPLOY],
     ["/api/rfr", PAGES.RFR],
     ["/api/reject", PAGES.REJECT],

@@ -8,6 +8,7 @@ export const GLOBAL_ACCESS_TENANT = "CL";
 export const PAGES = Object.freeze({
   DAILY: "daily",
   CLOSED: "closed",
+  UNSPRINTED: "unsprinted",
   OLKA_DEPLOY: "olkaDeploy",
   RFR: "rfr",
   REJECT: "reject",
@@ -73,12 +74,13 @@ const TENANT_ADMIN_PAGES = Object.freeze([
   PAGES.PROJECT_REPORT,
   PAGES.CREATE_TASK,
   PAGES.PROJECT_BOARD,
+  PAGES.OLKA_SPRINT,
 ]);
 
 const OLKA_PAGES = Object.freeze([
+  PAGES.UNSPRINTED,
   PAGES.LABEL_SYNC,
   PAGES.OLKA_DEPLOY,
-  PAGES.OLKA_SPRINT,
   PAGES.OLKA_ROADMAP,
 ]);
 
@@ -94,18 +96,14 @@ export function getAccessiblePages(actor) {
     return [
       ...dailyPages,
       ...TENANT_ADMIN_PAGES,
-      ...(isCommerceLab
-        ? [PAGES.OLKA_SPRINT, PAGES.TENANT_MANAGEMENT]
-        : []),
+      ...(isCommerceLab ? [PAGES.TENANT_MANAGEMENT] : []),
       ...(tenant === "OLKA" ? OLKA_PAGES : []),
       ...(tenant === "HD" ? [PAGES.HDV_STATUS] : []),
     ];
   }
   if (actor?.role !== ROLES.TENANT_ADMIN) return [];
   return [
-    ...dailyPages,
     ...TENANT_ADMIN_PAGES,
-    ...(isCommerceLab ? [PAGES.OLKA_SPRINT] : []),
     ...(tenant === "OLKA" ? OLKA_PAGES : []),
     ...(tenant === "HD" ? [PAGES.HDV_STATUS] : []),
   ];

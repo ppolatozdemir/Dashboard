@@ -82,9 +82,9 @@ function renderOlkaSprintStats() {
             <div class="sub">Diğer statüler</div>
         </div>
         <div class="stat-card red">
-            <div class="label">Bloke / Beklemede</div>
+            <div class="label">Bloke / Aksiyon Bekleyen</div>
             <div class="value">${s.blocked}</div>
-            <div class="sub">Blocked, On Hold</div>
+            <div class="sub">Blocked, On Hold, CustomerAction</div>
         </div>
         <div class="stat-card purple">
             <div class="label">Başarı Yüzdesi</div>
@@ -108,6 +108,7 @@ function renderOlkaSprintContent() {
             ${olkaSprintColumnHtml('completed', '✅ Tamamlananlar', data.completed || [])}
             ${olkaSprintColumnHtml('remaining', '⏳ Kalanlar', data.remaining || [])}
             ${olkaSprintColumnHtml('blocked', '⛔ Bloke / Beklemede', data.blocked || [])}
+            ${olkaSprintColumnHtml('customerAction', '👤 CustomerAction', data.customerAction || [])}
         </div>
     `;
 }

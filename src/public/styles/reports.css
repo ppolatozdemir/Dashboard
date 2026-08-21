@@ -230,6 +230,15 @@
     letter-spacing: 0.5px;
 }
 
+.rfr-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.rfr-table th.sortable:hover {
+    color: var(--accent-blue);
+}
+
 .rfr-table tbody tr:hover {
     background: var(--table-row-hover);
 }

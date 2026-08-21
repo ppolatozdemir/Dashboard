@@ -1,3 +1,5 @@
+const hdvStatusSort = { key: 'key', direction: 1 };
+
 async function loadHdvStatusReport() {
     const infoBar = document.getElementById('hdvStatusInfoBar');
     const contentEl = document.getElementById('hdvStatusReportContent');
@@ -56,7 +58,7 @@ function getFilteredHdvStatusRows() {
     if (!lastHdvStatusData || !lastHdvStatusData.rows) return [];
     const person = document.getElementById('hdvStatusPersonFilter').value;
     const term = (document.getElementById('hdvStatusSearch').value || '').trim().toLowerCase();
-    return lastHdvStatusData.rows.filter(r => {
+    const rows = lastHdvStatusData.rows.filter(r => {
         if (person && r.assignee !== person) return false;
         if (term) {
             const hay = `${r.key} ${r.summary}`.toLowerCase();
@@ -64,6 +66,7 @@ function getFilteredHdvStatusRows() {
         }
         return true;
     });
+    return sortReportRows(rows, hdvStatusSort);
 }
 
 function hdvStatusBadge(r) {
@@ -96,12 +99,12 @@ function renderHdvStatusTable() {
         <table class="rfr-table">
             <thead>
                 <tr>
-                    <th>Task No</th>
-                    <th>Task Özeti</th>
-                    <th>Atanan Kişi</th>
-                    <th>Sprint</th>
-                    <th>Task Durumu</th>
-                    <th>Reporter</th>
+                    <th class="sortable" onclick="toggleReportSort(hdvStatusSort, 'key', renderHdvStatusTable)">Task No${reportSortIndicator(hdvStatusSort, 'key')}</th>
+                    <th class="sortable" onclick="toggleReportSort(hdvStatusSort, 'summary', renderHdvStatusTable)">Task Özeti${reportSortIndicator(hdvStatusSort, 'summary')}</th>
+                    <th class="sortable" onclick="toggleReportSort(hdvStatusSort, 'assignee', renderHdvStatusTable)">Atanan Kişi${reportSortIndicator(hdvStatusSort, 'assignee')}</th>
+                    <th class="sortable" onclick="toggleReportSort(hdvStatusSort, 'sprint', renderHdvStatusTable)">Sprint${reportSortIndicator(hdvStatusSort, 'sprint')}</th>
+                    <th class="sortable" onclick="toggleReportSort(hdvStatusSort, 'statusName', renderHdvStatusTable)">Task Durumu${reportSortIndicator(hdvStatusSort, 'statusName')}</th>
+                    <th class="sortable" onclick="toggleReportSort(hdvStatusSort, 'reporter', renderHdvStatusTable)">Reporter${reportSortIndicator(hdvStatusSort, 'reporter')}</th>
                 </tr>
             </thead>
             <tbody>

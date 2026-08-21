@@ -4,10 +4,11 @@ import { getConfig } from "./config.js";
 /**
  * "Sprint Raporu" raporu:
  * Hebiar (Commercelab) Jira'sındaki weekly board'un EN SON KAPANAN sprintini alır
- * ve o sprintteki OLK ve SKCH maddelerini üç gruba ayırarak listeler:
+ * ve o sprintteki aktif tenant projelerinin maddelerini gruplandırarak listeler:
  *   - Tamamlananlar (Ready For Release, QA Testing, Test, Merge, Merged + "Tamamlandı"
  *     kategorisindeki tüm statüler: Onlive, Tamam vb.)
  *   - Bloke / Beklemede (Blocked, On Hold)
+ *   - Müşteri aksiyonu (CustomerAction)
  *   - Kalanlar (diğer tüm statüler)
  * Ayrıca genel bir istatistik (toplam, tamamlanan, kalan, bloke, başarı yüzdesi) döner.
  *
@@ -50,7 +51,17 @@ const BLOCKED_STATUSES = new Set(
     .filter(Boolean),
 );
 
-class OlkaSprintReportService {
+const CUSTOMER_ACTION_STATUSES = new Set(
+  (
+    process.env.OLKA_SPRINT_CUSTOMER_ACTION_STATUSES ||
+    "customeraction,customer action"
+  )
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+export class OlkaSprintReportService {
   getAuthHeader() {
     const { email, apiToken } = getConfig();
     if (!email || !apiToken) {
@@ -142,11 +153,11 @@ class OlkaSprintReportService {
   }
 
   /**
-   * Bir statüyü kategoriye ayırır: "completed" | "blocked" | "remaining".
-   * Öncelik bloke/beklemede -> tamamlandı -> kalan.
+   * Bir statüyü kategoriye ayırır.
    */
   classifyStatus(statusName, statusCategoryKey) {
     const name = (statusName || "").trim().toLowerCase();
+    if (CUSTOMER_ACTION_STATUSES.has(name)) return "customerAction";
     if (BLOCKED_STATUSES.has(name)) return "blocked";
     if (COMPLETED_STATUSES.has(name) || statusCategoryKey === "done") {
       return "completed";
@@ -158,7 +169,14 @@ class OlkaSprintReportService {
    * Belirtilen (ya da en son kapanan) sprint için OLK + SKCH maddelerini
    * kategorilere ayırarak ve istatistikleriyle birlikte döner.
    */
-  async getSprintReport(sprintId) {
+  async getSprintReport(sprintId, projectKeys = TARGET_PREFIXES) {
+    const allowedProjects = [
+      ...new Set(
+        projectKeys
+          .map((key) => String(key || "").trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    ].sort();
     const closed = this._sortClosedByRecency(
       await this._fetchAllSprints("closed"),
     );
@@ -175,7 +193,7 @@ class OlkaSprintReportService {
       ? closed.find((s) => String(s.id) === String(sprintId))
       : closed[0];
     if (!target) target = closed[0];
-    if (!target) return this._emptySprintReport(sprintList);
+    if (!target) return this._emptySprintReport(sprintList, allowedProjects);
     const issues = await this._fetchAllSprintIssues(target.id, [
       "summary",
       "status",
@@ -183,17 +201,17 @@ class OlkaSprintReportService {
       "issuetype",
     ]);
     const rows = issues
-      .map((issue) => this._mapSprintIssue(issue))
+      .map((issue) => this._mapSprintIssue(issue, allowedProjects))
       .filter(Boolean);
     rows.sort(
       (a, b) =>
         a.project.localeCompare(b.project) ||
         a.key.localeCompare(b.key, undefined, { numeric: true }),
     );
-    return this._buildSprintReport(target, sprintList, rows);
+    return this._buildSprintReport(target, sprintList, rows, allowedProjects);
   }
 
-  _emptySprintReport(sprints) {
+  _emptySprintReport(sprints, projectKeys) {
     return {
       sprint: null,
       sprints,
@@ -201,6 +219,7 @@ class OlkaSprintReportService {
       completed: [],
       remaining: [],
       blocked: [],
+      customerAction: [],
       stats: {
         total: 0,
         completed: 0,
@@ -209,15 +228,15 @@ class OlkaSprintReportService {
         successRate: 0,
       },
       perProject: {},
-      prefixes: TARGET_PREFIXES,
+      prefixes: projectKeys,
       count: 0,
     };
   }
 
-  _mapSprintIssue(issue) {
+  _mapSprintIssue(issue, allowedProjects) {
     const key = issue.key || "";
     const project = key.split("-")[0].toUpperCase();
-    if (!TARGET_PREFIXES.includes(project)) return null;
+    if (!allowedProjects.includes(project)) return null;
     const fields = issue.fields || {};
     const statusName = fields.status ? fields.status.name : "";
     const statusCategory = fields.status?.statusCategory;
@@ -237,21 +256,29 @@ class OlkaSprintReportService {
     };
   }
 
-  _buildSprintReport(target, sprintList, rows) {
+  _buildSprintReport(target, sprintList, rows, projectKeys) {
     const completed = rows.filter((r) => r.category === "completed");
     const remaining = rows.filter((r) => r.category === "remaining");
     const blocked = rows.filter((r) => r.category === "blocked");
+    const customerAction = rows.filter(
+      (r) => r.category === "customerAction",
+    );
     const total = rows.length;
     const successRate =
       total > 0 ? Math.round((completed.length / total) * 1000) / 10 : 0;
     const perProject = {};
-    for (const project of TARGET_PREFIXES) {
+    for (const project of projectKeys) {
       const subset = rows.filter((row) => row.project === project);
       perProject[project] = {
         total: subset.length,
         completed: subset.filter((row) => row.category === "completed").length,
         remaining: subset.filter((row) => row.category === "remaining").length,
-        blocked: subset.filter((row) => row.category === "blocked").length,
+        blocked: subset.filter((row) =>
+          ["blocked", "customerAction"].includes(row.category),
+        ).length,
+        customerAction: subset.filter(
+          (row) => row.category === "customerAction",
+        ).length,
       };
     }
     return {
@@ -268,17 +295,19 @@ class OlkaSprintReportService {
       completed,
       remaining,
       blocked,
+      customerAction,
       stats: {
         total,
         completed: completed.length,
         remaining: remaining.length,
-        blocked: blocked.length,
+        blocked: blocked.length + customerAction.length,
         successRate,
       },
       perProject,
-      prefixes: TARGET_PREFIXES,
+      prefixes: projectKeys,
       completedStatuses: [...COMPLETED_STATUSES],
       blockedStatuses: [...BLOCKED_STATUSES],
+      customerActionStatuses: [...CUSTOMER_ACTION_STATUSES],
       count: total,
     };
   }
@@ -351,7 +380,7 @@ class OlkaSprintReportService {
       ["Toplam Madde", stats.total, null],
       ["Tamamlandı", stats.completed, GREEN_TEXT],
       ["Kalan", stats.remaining, AMBER_TEXT],
-      ["Bloke / Beklemede", stats.blocked, RED_TEXT],
+      ["Bloke / Aksiyon Bekleyen", stats.blocked, RED_TEXT],
       ["Başarı Yüzdesi", `%${stats.successRate}`, GREEN_TEXT],
     ];
     let r = 4;
@@ -512,16 +541,19 @@ class OlkaSprintReportService {
       completed: "Tamamlandı",
       remaining: "Kalan",
       blocked: "Bloke/Beklemede",
+      customerAction: "CustomerAction",
     };
     const catFill = {
       completed: GREEN_FILL,
       remaining: AMBER_FILL,
       blocked: RED_FILL,
+      customerAction: "FFF1E8FF",
     };
     const catText = {
       completed: GREEN_TEXT,
       remaining: AMBER_TEXT,
       blocked: RED_TEXT,
+      customerAction: "FF7E22CE",
     };
 
     // Tamamlanan -> Kalan -> Bloke sırasıyla yaz
@@ -529,6 +561,7 @@ class OlkaSprintReportService {
       ...(data.completed || []),
       ...(data.remaining || []),
       ...(data.blocked || []),
+      ...(data.customerAction || []),
     ];
 
     let rowIdx = 4;

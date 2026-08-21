@@ -1,3 +1,5 @@
+const rejectSort = { key: 'projectName', direction: 1 };
+
 async function loadRejectReport() {
     const listEl = document.getElementById('rejectProjectList');
     const tableEl = document.getElementById('rejectTableContent');
@@ -17,8 +19,9 @@ async function loadRejectReport() {
         if (!res.ok) throw new Error((await res.json()).error || 'Rapor alınamadı');
         const data = await res.json();
         lastRejectData = data;
-        selectedRejectProject = null;
+        selectedRejectProject = '__all__';
         
+        populateRejectProjectFilter();
         renderRejectInfo();
         renderRejectProjects();
         renderRejectTable();
@@ -31,6 +34,24 @@ async function loadRejectReport() {
             </div>
         `;
     }
+}
+
+function populateRejectProjectFilter() {
+    const select = document.getElementById('rejectProjectFilter');
+    if (!select || !lastRejectData) return;
+    select.innerHTML = [
+        '<option value="__all__">Tümü</option>',
+        ...(lastRejectData.projects || []).map(project =>
+            `<option value="${escapeHtml(project.key)}">${escapeHtml(project.name)} (${project.count})</option>`
+        )
+    ].join('');
+    select.value = selectedRejectProject;
+}
+
+function onRejectProjectFilterChange() {
+    selectedRejectProject = document.getElementById('rejectProjectFilter')?.value || '__all__';
+    renderRejectProjects();
+    renderRejectTable();
 }
 
 function renderRejectInfo() {
@@ -84,6 +105,8 @@ function renderRejectProjects() {
 
 function selectRejectProject(key) {
     selectedRejectProject = key;
+    const select = document.getElementById('rejectProjectFilter');
+    if (select) select.value = key;
     renderRejectProjects();
     renderRejectTable();
 }
@@ -91,9 +114,10 @@ function selectRejectProject(key) {
 // Seçili projeye göre görünen satırları döndürür
 function getFilteredRejectRows() {
     if (!lastRejectData || !lastRejectData.rows) return [];
-    if (selectedRejectProject === null) return [];              // henüz proje seçilmedi -> boş
-    if (selectedRejectProject === '__all__') return lastRejectData.rows;
-    return lastRejectData.rows.filter(r => r.projectKey === selectedRejectProject);
+    const rows = selectedRejectProject === '__all__'
+        ? lastRejectData.rows
+        : lastRejectData.rows.filter(r => r.projectKey === selectedRejectProject);
+    return sortReportRows(rows, rejectSort);
 }
 
 function formatRejectDate(iso) {
@@ -107,17 +131,6 @@ function formatRejectDate(iso) {
 function renderRejectTable() {
     const tableEl = document.getElementById('rejectTableContent');
     if (!lastRejectData) return;
-    
-    // Henüz bir proje seçilmediyse liste yerine yönlendirme mesajı göster
-    if (selectedRejectProject === null) {
-        tableEl.innerHTML = `
-            <div class="rfr-empty">
-                👈 Soldaki listeden bir <strong>proje</strong> seçin; o projenin reddedilen maddeleri burada listelensin.<br>
-                Tüm maddeleri görmek için <strong>"📋 Tümü"</strong>ne tıklayın.
-            </div>
-        `;
-        return;
-    }
     
     const rows = getFilteredRejectRows();
     
@@ -134,13 +147,13 @@ function renderRejectTable() {
         <table class="rfr-table">
             <thead>
                 <tr>
-                    <th>Proje</th>
-                    <th>Task Kodu</th>
-                    <th>Task Özet</th>
-                    <th>Atanan Kişi</th>
-                    <th>Statü</th>
-                    <th>Oluşturulma</th>
-                    <th>Son Güncelleme</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'projectName', renderRejectTable)">Proje${reportSortIndicator(rejectSort, 'projectName')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'key', renderRejectTable)">Task Kodu${reportSortIndicator(rejectSort, 'key')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'summary', renderRejectTable)">Task Özet${reportSortIndicator(rejectSort, 'summary')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'assignee', renderRejectTable)">Atanan Kişi${reportSortIndicator(rejectSort, 'assignee')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'statusName', renderRejectTable)">Statü${reportSortIndicator(rejectSort, 'statusName')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'created', renderRejectTable)">Oluşturulma${reportSortIndicator(rejectSort, 'created')}</th>
+                    <th class="sortable" onclick="toggleReportSort(rejectSort, 'updated', renderRejectTable)">Son Güncelleme${reportSortIndicator(rejectSort, 'updated')}</th>
                 </tr>
             </thead>
             <tbody>
@@ -177,7 +190,7 @@ async function exportRejectExcel() {
     }
     
     // Proje seçilmediyse tüm maddeleri, seçildiyse yalnızca o projenin maddelerini aktar
-    const rows = selectedRejectProject === null ? lastRejectData.rows : getFilteredRejectRows();
+    const rows = getFilteredRejectRows();
     const btn = document.getElementById('exportRejectBtn');
     const oldText = btn ? btn.textContent : null;
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Hazırlanıyor...'; }

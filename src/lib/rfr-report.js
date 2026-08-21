@@ -19,7 +19,7 @@ const RFR_STATUS = process.env.RFR_STATUS || "Ready For Release";
 const OVERDUE_DAYS = parseInt(process.env.RFR_OVERDUE_DAYS || "30", 10);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-class RfrReportService {
+export class RfrReportService {
   getAuthHeader() {
     const { email, apiToken } = getConfig();
     if (!email || !apiToken) {
@@ -153,23 +153,46 @@ class RfrReportService {
    * Statüsü "Ready For Release" olan Hebiar tasklarını, kişi bazlı özet ve
    * her task için RFR'de geçen gün sayısıyla birlikte döner.
    */
-  async getRfrTasks() {
+  async getRfrTasks(projectKeys = []) {
+    const allowedProjectKeys = [
+      ...new Set(
+        projectKeys
+          .map((key) => String(key || "").trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    ].sort();
+    if (allowedProjectKeys.length === 0) {
+      return {
+        status: RFR_STATUS,
+        overdueDays: OVERDUE_DAYS,
+        count: 0,
+        overdueCount: 0,
+        peopleCount: 0,
+        projectCount: 0,
+        generatedAt: new Date().toISOString(),
+        people: [],
+        projects: [],
+        rows: [],
+      };
+    }
     const fields = [
       "summary",
       "status",
       "assignee",
+      "project",
       "statuscategorychangedate",
       "created",
       "updated",
     ];
 
-    const jql = `status = "${RFR_STATUS}" ORDER BY assignee ASC, key ASC`;
+    const projectClause = allowedProjectKeys.map((key) => `"${key}"`).join(", ");
+    const baseJql = `project in (${projectClause}) AND status = "${RFR_STATUS}"`;
+    const jql = `${baseJql} ORDER BY assignee ASC, key ASC`;
     let issues;
     try {
       issues = await this._searchAllJql(jql, fields);
     } catch (err) {
-      // Sıralama/statü adı JQL'de sorun çıkarırsa sade sorgu ile tekrar dene.
-      issues = await this._searchAllJql(`status = "${RFR_STATUS}"`, fields);
+      issues = await this._searchAllJql(baseJql, fields);
     }
 
     const now = Date.now();
@@ -189,14 +212,17 @@ class RfrReportService {
     });
 
     const people = this._summarizePeople(rows);
+    const projects = this._summarizeProjects(allowedProjectKeys, rows);
     return {
       status: RFR_STATUS,
       overdueDays: OVERDUE_DAYS,
       count: rows.length,
       overdueCount: rows.filter((r) => r.overdue).length,
       peopleCount: people.length,
+      projectCount: projects.length,
       generatedAt: new Date().toISOString(),
       people,
+      projects,
       rows,
     };
   }
@@ -219,6 +245,12 @@ class RfrReportService {
       sinceMs != null ? Math.max(0, Math.floor((now - sinceMs) / DAY_MS)) : null;
     return {
       key: issue.key,
+      projectKey: fields.project?.key || issue.key?.split("-")[0] || "",
+      projectName:
+        fields.project?.name ||
+        fields.project?.key ||
+        issue.key?.split("-")[0] ||
+        "",
       summary: fields.summary || "",
       assignee: fields.assignee ? fields.assignee.displayName : null,
       statusName,
@@ -240,6 +272,7 @@ class RfrReportService {
           maxDays: 0,
         });
       }
+
       const person = peopleMap.get(name);
       person.count++;
       if (row.overdue) person.overdueCount++;
@@ -248,6 +281,28 @@ class RfrReportService {
       }
     }
     return [...peopleMap.values()].sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"),
+    );
+  }
+
+  _summarizeProjects(projectKeys, rows) {
+    const projects = new Map(
+      projectKeys.map((key) => [key, { key, name: key, count: 0 }]),
+    );
+    for (const row of rows) {
+      const key = row.projectKey;
+      if (!projects.has(key)) {
+        projects.set(key, {
+          key,
+          name: row.projectName || key,
+          count: 0,
+        });
+      }
+      const project = projects.get(key);
+      project.name = row.projectName || project.name;
+      project.count++;
+    }
+    return [...projects.values()].sort(
       (a, b) => b.count - a.count || a.name.localeCompare(b.name, "tr"),
     );
   }
@@ -271,6 +326,7 @@ class RfrReportService {
     });
 
     const columns = [
+      { header: "Proje", key: "projectName", width: 22 },
       { header: "Atanan Kişi", key: "assignee", width: 24 },
       { header: "Task Kodu", key: "key", width: 15 },
       { header: "Task Özet", key: "summary", width: 60 },
@@ -280,7 +336,7 @@ class RfrReportService {
     ];
     ws.columns = columns.map((c) => ({ key: c.key, width: c.width }));
 
-    const LAST_COL = "F";
+    const LAST_COL = "G";
     const COL_COUNT = columns.length;
     const NAVY = "FF1F3A5F";
     const HEADER = "FF2E5AAC";
@@ -348,30 +404,32 @@ class RfrReportService {
       const zebra = i % 2 === 1;
       const overdue = !!r.overdue;
 
-      const c1 = row.getCell(1);
-      c1.value = r.assignee || "Atanmamış";
-      if (!r.assignee) c1.font = { color: { argb: "FFAAAAAA" }, italic: true };
+      row.getCell(1).value = r.projectName || r.projectKey || "";
 
       const c2 = row.getCell(2);
-      c2.value = r.key
+      c2.value = r.assignee || "Atanmamış";
+      if (!r.assignee) c2.font = { color: { argb: "FFAAAAAA" }, italic: true };
+
+      const c3 = row.getCell(3);
+      c3.value = r.key
         ? { text: r.key, hyperlink: `${HEBIAR_BASE_URL}/browse/${r.key}` }
         : "";
-      c2.font = { color: { argb: "FF1155CC" }, underline: true, bold: true };
+      c3.font = { color: { argb: "FF1155CC" }, underline: true, bold: true };
 
-      row.getCell(3).value = r.summary || "";
-      row.getCell(4).value = r.statusName || meta.status || RFR_STATUS;
-
-      const c5 = row.getCell(5);
-      if (r.rfrSince) {
-        c5.value = new Date(r.rfrSince);
-        c5.numFmt = "dd.mm.yyyy hh:mm";
-      } else {
-        c5.value = "—";
-        c5.font = { color: { argb: "FFAAAAAA" } };
-      }
+      row.getCell(4).value = r.summary || "";
+      row.getCell(5).value = r.statusName || meta.status || RFR_STATUS;
 
       const c6 = row.getCell(6);
-      c6.value = r.daysInRfr != null ? r.daysInRfr : "—";
+      if (r.rfrSince) {
+        c6.value = new Date(r.rfrSince);
+        c6.numFmt = "dd.mm.yyyy hh:mm";
+      } else {
+        c6.value = "—";
+        c6.font = { color: { argb: "FFAAAAAA" } };
+      }
+
+      const c7 = row.getCell(7);
+      c7.value = r.daysInRfr != null ? r.daysInRfr : "—";
 
       for (let col = 1; col <= COL_COUNT; col++) {
         const cell = row.getCell(col);
@@ -383,8 +441,8 @@ class RfrReportService {
         };
         cell.alignment = {
           vertical: "middle",
-          horizontal: col === 3 ? "left" : "center",
-          wrapText: col === 3,
+          horizontal: col === 4 ? "left" : "center",
+          wrapText: col === 4,
         };
         if (overdue) {
           cell.fill = {
@@ -401,10 +459,9 @@ class RfrReportService {
         }
       }
 
-      // Gecikmiş satırlarda gün sayısını kırmızı & kalın vurgula.
       if (overdue) {
-        row.getCell(6).font = { bold: true, color: { argb: OVERDUE_TEXT } };
-        row.getCell(1).font = {
+        row.getCell(7).font = { bold: true, color: { argb: OVERDUE_TEXT } };
+        row.getCell(2).font = {
           bold: true,
           color: { argb: r.assignee ? OVERDUE_TEXT : "FFAAAAAA" },
         };

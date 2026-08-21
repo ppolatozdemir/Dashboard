@@ -131,7 +131,7 @@ function addHdvDataRow(worksheet, item, index) {
   row.height = 18;
 }
 
-class HdvStatusReportService {
+export class HdvStatusReportService {
   getAuthHeader() {
     const { email, apiToken } = getConfig();
     if (!email || !apiToken) {
@@ -274,7 +274,12 @@ class HdvStatusReportService {
     const issues = await this._fetchAllowedIssues(fields);
     const rows = issues
       .map((issue) => this._mapStatusIssue(issue, SPRINT_FIELD))
-      .filter((row) => row.assignee && allowedSet.has(normName(row.assignee)));
+      .filter(
+        (row) =>
+          row.sprint &&
+          row.assignee &&
+          allowedSet.has(normName(row.assignee)),
+      );
     rows.sort((a, b) => {
       const comparison = (a.assignee || "").localeCompare(
         b.assignee || "",
@@ -308,7 +313,7 @@ class HdvStatusReportService {
       const idClause = [...accountMap.values()]
         .map((id) => `"${id}"`)
         .join(", ");
-      const jql = `project = ${PROJECT} AND assignee in (${idClause}) AND statusCategory != Done ORDER BY assignee ASC, key DESC`;
+      const jql = `project = ${PROJECT} AND Sprint is not EMPTY AND assignee in (${idClause}) AND statusCategory != Done ORDER BY assignee ASC, key DESC`;
       try {
         issues = await this._searchAllJql(jql, fields);
       } catch (err) {
@@ -317,7 +322,7 @@ class HdvStatusReportService {
     }
 
     if (issues.length === 0) {
-      const jql = `project = ${PROJECT} AND assignee is not EMPTY AND statusCategory != Done ORDER BY assignee ASC, key DESC`;
+      const jql = `project = ${PROJECT} AND Sprint is not EMPTY AND assignee is not EMPTY AND statusCategory != Done ORDER BY assignee ASC, key DESC`;
       issues = await this._searchAllJql(jql, fields);
     }
     return issues;

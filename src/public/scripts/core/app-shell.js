@@ -11,6 +11,40 @@ function escapeHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
+function sortReportRows(rows, sortState) {
+    if (!sortState?.key) return [...rows];
+    const direction = sortState.direction === -1 ? -1 : 1;
+    return [...rows].sort((left, right) => {
+        const a = left?.[sortState.key];
+        const b = right?.[sortState.key];
+        if (a == null && b == null) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        if (typeof a === 'number' && typeof b === 'number') {
+            return (a - b) * direction;
+        }
+        return String(a).localeCompare(String(b), 'tr', {
+            numeric: true,
+            sensitivity: 'base'
+        }) * direction;
+    });
+}
+
+function toggleReportSort(sortState, key, render) {
+    if (sortState.key === key) {
+        sortState.direction *= -1;
+    } else {
+        sortState.key = key;
+        sortState.direction = 1;
+    }
+    render();
+}
+
+function reportSortIndicator(sortState, key) {
+    if (sortState.key !== key) return '';
+    return sortState.direction === -1 ? ' ↓' : ' ↑';
+}
+
 // Theme Management
 function initTheme() {
     const savedTheme = localStorage.getItem('dashboard-theme') || 'dark';
@@ -77,7 +111,7 @@ function updateChartTheme() {
 initTheme();
 
 const DASHBOARD_TABS = [
-    'daily', 'closed', 'olkaDeploy', 'rfr', 'reject',
+    'daily', 'closed', 'unsprinted', 'olkaDeploy', 'rfr', 'reject',
     'hdvStatus', 'olkaSprint', 'olkaRoadmap', 'labelSync', 'mcBoard',
     'project', 'createTask', 'tenantManagement'
 ];
@@ -102,6 +136,7 @@ function loadTabContent(tab) {
     if (tab === 'tenantManagement') loadTenantManagement();
 
     [
+        { name: 'unsprinted', isLoaded: () => unsprintedSprintsLoaded, markLoaded: () => { unsprintedSprintsLoaded = true; }, load: loadUnsprintedSprints },
         { name: 'olkaDeploy', isLoaded: () => olkaDeployLoaded, markLoaded: () => { olkaDeployLoaded = true; }, load: loadOlkaDeployReport },
         { name: 'rfr', isLoaded: () => rfrLoaded, markLoaded: () => { rfrLoaded = true; }, load: loadRfrReport },
         { name: 'reject', isLoaded: () => rejectLoaded, markLoaded: () => { rejectLoaded = true; }, load: loadRejectReport },

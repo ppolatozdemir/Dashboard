@@ -1,6 +1,10 @@
 import * as reports from "../controllers/report-controller.js";
 
 export function registerReportRoutes(app) {
+  app.get("/api/unsprinted/olka-sprints", reports.olkaUnsprintedSprints);
+  app.get("/api/unsprinted/hebiar-sprints", reports.hebiarUnsprintedSprints);
+  app.get("/api/unsprinted/report", reports.unsprintedReport);
+  app.post("/api/unsprinted/export", reports.exportUnsprinted);
   app.get("/api/olka-deploy/report", reports.olkaDeployReport);
   app.post("/api/olka-deploy/export", reports.exportOlkaDeploy);
   app.get("/api/rfr/report", reports.rfrReport);
