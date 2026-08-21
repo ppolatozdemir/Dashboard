@@ -1,4 +1,5 @@
 import supportReportService from "../../lib/support-report.js";
+import { taskProjectKeysFor } from "../../auth/task-policy.js";
 import { getConfig, isConfigured } from "../../lib/config.js";
 import {
   getHebiarClient,
@@ -17,6 +18,7 @@ export async function projects(req, res) {
   try {
     if (!requireConfiguration(res)) return;
     const client = getHebiarClient();
+    const allowedProjectKeys = new Set(taskProjectKeysFor(req.auth));
     const projects = [];
     let startAt = 0;
     for (let page = 0; page < 50; page++) {
@@ -29,11 +31,13 @@ export async function projects(req, res) {
       startAt += values.length;
     }
     res.json(
-      projects.map((project) => ({
-        key: project.key,
-        name: project.name,
-        id: project.id,
-      })),
+      projects
+        .filter((project) => allowedProjectKeys.has(project.key))
+        .map((project) => ({
+          key: project.key,
+          name: project.name,
+          id: project.id,
+        })),
     );
   } catch (error) {
     console.error("Proje listesi hatası:", error.response?.data || error.message);

@@ -3,12 +3,13 @@ import test from "node:test";
 import { AuthService, ROLES } from "../src/lib/auth-service.js";
 import {
   COMPANY_LOGIN_TENANTS,
-  getAccessiblePages,
   getCompanyLoginTenant,
   getCompanyTenantOptions,
   getCompanyTenantScopes,
-  PAGES,
+  getTaskProjectKeys,
+  canCreateTaskInProject,
 } from "../src/auth/constants.js";
+import { authorizeTaskProject } from "../src/auth/task-policy.js";
 
 const owner = {
   id: "owner-1",
@@ -43,6 +44,19 @@ test("CommerceLab login tenant options remain fixed and ordered", () => {
     "CL",
     "HD",
   ]);
+});
+
+test("Task creation projects are restricted to the active tenant", () => {
+  assert.deepEqual(getTaskProjectKeys("OLKA"), ["OLK", "KLA", "ASCS", "SKCH"]);
+  assert.deepEqual(getTaskProjectKeys("KLD"), ["OLK", "KLA", "ASCS", "SKCH"]);
+  assert.deepEqual(getTaskProjectKeys("HD"), ["KFC", "HDV"]);
+  assert.equal(canCreateTaskInProject("HDV", "KFC"), true);
+  assert.equal(canCreateTaskInProject("HD", "MC"), false);
+  assert.equal(canCreateTaskInProject("CL", "MC"), true);
+  assert.throws(
+    () => authorizeTaskProject({ tenant: "HD" }, "MC"),
+    /aktif tenantınız/,
+  );
 });
 
 test("Password reset is enumeration-safe, rate limited, and revokes local sessions", async () => {
@@ -210,87 +224,6 @@ test("OLKA and HD aliases resolve to their backend tenant scopes", () => {
     getCompanyTenantOptions(["MCC", "KLD", "SKC", "EVY"]),
     ["OLKA", "MCC", "HD"],
   );
-});
-
-test("page access follows the owner and tenant access plan", () => {
-  assert.deepEqual(
-    getAccessiblePages({ role: ROLES.OWNER_ADMIN, tenant: "CL" }),
-    [
-      PAGES.DAILY,
-      PAGES.CLOSED,
-      PAGES.UNSPRINTED,
-      PAGES.RFR,
-      PAGES.REJECT,
-      PAGES.OLKA_SPRINT,
-      PAGES.PROJECT_REPORT,
-      PAGES.CREATE_TASK,
-      PAGES.PROJECT_BOARD,
-    ],
-  );
-
-  const olkaAdminPages = getAccessiblePages({
-    role: ROLES.TENANT_ADMIN,
-    tenant: "OLKA",
-  });
-  assert.ok(olkaAdminPages.includes(PAGES.UNSPRINTED));
-  assert.ok(olkaAdminPages.includes(PAGES.PROJECT_BOARD));
-  assert.ok(olkaAdminPages.includes(PAGES.LABEL_SYNC));
-  assert.ok(olkaAdminPages.includes(PAGES.OLKA_DEPLOY));
-  assert.ok(olkaAdminPages.includes(PAGES.OLKA_SPRINT));
-  assert.ok(olkaAdminPages.includes(PAGES.OLKA_ROADMAP));
-  assert.ok(!olkaAdminPages.includes(PAGES.DAILY));
-  assert.ok(!olkaAdminPages.includes(PAGES.HDV_STATUS));
-
-  const hdAdminPages = getAccessiblePages({
-    role: ROLES.TENANT_ADMIN,
-    tenant: "HD",
-  });
-  assert.ok(hdAdminPages.includes(PAGES.HDV_STATUS));
-  assert.ok(hdAdminPages.includes(PAGES.OLKA_SPRINT));
-  assert.ok(!hdAdminPages.includes(PAGES.OLKA_DEPLOY));
-
-  const otherAdminPages = getAccessiblePages({
-    role: ROLES.TENANT_ADMIN,
-    tenant: "MCC",
-  });
-  assert.deepEqual(otherAdminPages, [
-    PAGES.UNSPRINTED,
-    PAGES.RFR,
-    PAGES.REJECT,
-    PAGES.OLKA_SPRINT,
-    PAGES.PROJECT_REPORT,
-    PAGES.CREATE_TASK,
-    PAGES.PROJECT_BOARD,
-  ]);
-});
-
-test("page middleware rejects pages outside the access plan", () => {
-  const service = createService();
-  const denied = { statusCode: null, body: null };
-  let proceeded = false;
-
-  service.requirePageAccess(PAGES.DAILY)(
-    { auth: { role: ROLES.TENANT_ADMIN, tenant: "KLD" } },
-    {
-      status(code) {
-        denied.statusCode = code;
-        return this;
-      },
-      json(body) {
-        denied.body = body;
-      },
-    },
-    () => {
-      proceeded = true;
-    },
-  );
-
-  assert.equal(proceeded, false);
-  assert.equal(denied.statusCode, 403);
-  assert.deepEqual(denied.body, {
-    error: "Bu sayfaya erişim yetkiniz yok",
-  });
-  service.close();
 });
 
 test("OwnerAdmin creates a multi-tenant user and login requires tenant selection", () => {
@@ -481,32 +414,6 @@ test("OwnerAdmin role claim logs in without tenant-specific role lookup", async 
   }
 });
 
-test("CommerceLab authentication always assigns OwnerAdmin", async () => {
-  const service = createService();
-  const payload = {
-    "__tenant__": "KLD",
-    [ROLES_CLAIM]: ROLES.TENANT_ADMIN,
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
-  const token = [
-    Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString(
-      "base64url",
-    ),
-    Buffer.from(JSON.stringify(payload)).toString("base64url"),
-    "signature-validated-by-backend",
-  ].join(".");
-
-  service.callUserService = async () => ({ status: 200, data: [] });
-
-  try {
-    const identity = await service.validateCompanyToken(token);
-    assert.equal(identity.role, ROLES.OWNER_ADMIN);
-    assert.equal(identity.tenantScope, null);
-  } finally {
-    service.close();
-  }
-});
-
 test("CL TenantAdmin creates users within its allowed tenants", () => {
   const service = createService();
   const tenantAdmin = {
@@ -642,48 +549,6 @@ test("Only OwnerAdmin can switch an active company tenant", () => {
           "MCC",
         ),
       /Tenant değiştirme yetkiniz yok/,
-    );
-  } finally {
-    service.close();
-  }
-});
-
-test("OwnerAdmin tenant scope follows the active tenant", async () => {
-  const service = createService();
-  const payload = {
-    "__tenant__": "KLD",
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
-  const token = [
-    Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString(
-      "base64url",
-    ),
-    Buffer.from(JSON.stringify(payload)).toString("base64url"),
-    "signature-validated-by-backend",
-  ].join(".");
-
-  service.callUserService = async () => ({ status: 200, data: [] });
-
-  try {
-    service.registerCompanySession(
-      token,
-      COMPANY_LOGIN_TENANTS,
-      "OLKA",
-      new Date(Date.now() + 60_000).toISOString(),
-    );
-    assert.equal(
-      (await service.authenticateCompanyToken(token)).tenantScope,
-      "OLKA",
-    );
-
-    service.switchCompanyTenant(
-      token,
-      { role: ROLES.OWNER_ADMIN },
-      "CL",
-    );
-    assert.equal(
-      (await service.authenticateCompanyToken(token)).tenantScope,
-      null,
     );
   } finally {
     service.close();

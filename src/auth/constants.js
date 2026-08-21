@@ -5,22 +5,6 @@ export const ROLES = Object.freeze({
 
 export const GLOBAL_ACCESS_TENANT = "CL";
 
-export const PAGES = Object.freeze({
-  DAILY: "daily",
-  CLOSED: "closed",
-  UNSPRINTED: "unsprinted",
-  OLKA_DEPLOY: "olkaDeploy",
-  RFR: "rfr",
-  REJECT: "reject",
-  HDV_STATUS: "hdvStatus",
-  OLKA_SPRINT: "olkaSprint",
-  OLKA_ROADMAP: "olkaRoadmap",
-  LABEL_SYNC: "labelSync",
-  PROJECT_BOARD: "mcBoard",
-  PROJECT_REPORT: "project",
-  CREATE_TASK: "createTask",
-});
-
 export const COMPANY_LOGIN_TENANTS = Object.freeze([
   "OLKA",
   "MCC",
@@ -45,51 +29,30 @@ export const COMPANY_TENANT_SCOPES = Object.freeze({
   HD: Object.freeze(["HDV"]),
 });
 
-const TENANT_ADMIN_PAGES = Object.freeze([
-  PAGES.UNSPRINTED,
-  PAGES.RFR,
-  PAGES.REJECT,
-  PAGES.OLKA_SPRINT,
-  PAGES.PROJECT_REPORT,
-  PAGES.CREATE_TASK,
-  PAGES.PROJECT_BOARD,
-]);
+const TASK_PROJECT_KEYS_BY_TENANT = Object.freeze({
+  OLKA: Object.freeze(["OLK", "KLA", "ASCS", "SKCH"]),
+  MCC: Object.freeze(["MC", "IMC"]),
+  SCH: Object.freeze(["SOCH"]),
+  A101: Object.freeze(["A101"]),
+  GRC: Object.freeze(["GRAC"]),
+  MRDIY: Object.freeze(["MDY"]),
+  DEC: Object.freeze(["DEC"]),
+  HD: Object.freeze(["KFC", "HDV"]),
+});
 
-const OWNER_ADMIN_PAGES = Object.freeze([
-  PAGES.DAILY,
-  PAGES.CLOSED,
-  ...TENANT_ADMIN_PAGES,
-]);
-
-const OLKA_PAGES = Object.freeze([
-  PAGES.LABEL_SYNC,
-  PAGES.OLKA_DEPLOY,
-  PAGES.OLKA_ROADMAP,
-]);
+const TASK_TENANT_ALIASES = Object.freeze({
+  SKC: "OLKA",
+  SKCP: "OLKA",
+  ASC: "OLKA",
+  BRR: "OLKA",
+  HFV: "OLKA",
+  HTR: "OLKA",
+  KLD: "OLKA",
+  HDV: "HD",
+});
 
 function normalizeCompanyTenant(tenant) {
   return String(tenant || "").trim().toUpperCase();
-}
-
-export function getAccessiblePages(actor) {
-  const tenant = normalizeCompanyTenant(actor?.tenant);
-  if (actor?.role === ROLES.OWNER_ADMIN) {
-    return [
-      ...OWNER_ADMIN_PAGES,
-      ...(tenant === "OLKA" ? OLKA_PAGES : []),
-      ...(tenant === "HD" ? [PAGES.HDV_STATUS] : []),
-    ];
-  }
-  if (actor?.role !== ROLES.TENANT_ADMIN) return [];
-  return [
-    ...TENANT_ADMIN_PAGES,
-    ...(tenant === "OLKA" ? OLKA_PAGES : []),
-    ...(tenant === "HD" ? [PAGES.HDV_STATUS] : []),
-  ];
-}
-
-export function hasPageAccess(actor, page) {
-  return getAccessiblePages(actor).includes(page);
 }
 
 export function getCompanyLoginTenant(tenant, availableTenants = []) {
@@ -115,6 +78,23 @@ export function getCompanyTenantOptions(availableTenants) {
       tenant === "HD" ||
       available.has(tenant) ||
       COMPANY_TENANT_SCOPES[tenant].some((scope) => available.has(scope)),
+  );
+}
+
+export function getTaskProjectKeys(tenant) {
+  const normalizedTenant = normalizeCompanyTenant(tenant);
+  if (normalizedTenant === GLOBAL_ACCESS_TENANT) {
+    return Object.freeze(
+      [...new Set(Object.values(TASK_PROJECT_KEYS_BY_TENANT).flat())].sort(),
+    );
+  }
+  const mappedTenant = TASK_TENANT_ALIASES[normalizedTenant] || normalizedTenant;
+  return TASK_PROJECT_KEYS_BY_TENANT[mappedTenant] || Object.freeze([]);
+}
+
+export function canCreateTaskInProject(tenant, projectKey) {
+  return getTaskProjectKeys(tenant).includes(
+    String(projectKey || "").trim().toUpperCase(),
   );
 }
 
