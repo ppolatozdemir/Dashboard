@@ -1,4 +1,4 @@
-# Jira Support Dashboard
+# LAB Board
 
 Jira Cloud verilerini tek bir web arayüzünde raporlayan, operasyonel görevleri kolaylaştıran ve ayrıca temel Jira işlemleri için komut satırı araçları sunan Node.js uygulaması.
 #

@@ -80,26 +80,18 @@ a:focus-visible {
 .sidebar-brand {
     display: flex;
     align-items: center;
-    gap: 11px;
-    min-height: 48px;
+    justify-content: center;
+    min-height: 64px;
     margin: 0 6px 14px;
-    padding: 0 8px 14px;
+    padding: 0 4px 14px;
     border-bottom: 1px solid var(--border-color);
-    color: var(--text-primary);
-    font-size: 17px;
-    font-weight: 750;
-    letter-spacing: -0.01em;
 }
 
-.sidebar-brand-mark {
-    display: grid;
-    width: 34px;
-    height: 34px;
-    place-items: center;
-    flex: 0 0 auto;
-    border-radius: 10px;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-    box-shadow: 0 8px 22px rgba(67, 97, 238, 0.28);
+.sidebar-brand-logo {
+    display: block;
+    width: min(100%, 210px);
+    height: auto;
+    object-fit: contain;
 }
 
 .sidebar-label {
