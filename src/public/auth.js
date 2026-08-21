@@ -283,9 +283,7 @@
             const response = await nativeFetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(method === 'local'
-                    ? { email, password, tenant }
-                    : { username: email, password, tenant })
+                body: JSON.stringify({ email, password, tenant })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Giriş yapılamadı.');

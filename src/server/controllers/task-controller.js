@@ -1,4 +1,5 @@
 import { getHebiarClient } from "../../shared/hebiar-client.js";
+import { authorizeTaskProject } from "../../auth/task-policy.js";
 import { requireConfiguration } from "./controller-utils.js";
 
 async function resolveIssueType(client, projectKey) {
@@ -79,6 +80,7 @@ export async function createTask(req, res) {
         .status(400)
         .json({ error: "Proje ve konu başlığı zorunludur" });
     }
+    authorizeTaskProject(req.auth, projectKey);
     const client = getHebiarClient();
     const agileClient = getHebiarClient("/rest/agile/1.0");
     const issueType = await resolveIssueType(client, projectKey);

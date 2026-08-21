@@ -62,7 +62,7 @@ Dashboard'daki başlıca işlevler:
 | Sprint, roadmap ve proje raporları | Sprint dağılımı, roadmap ve proje kırılımlarını gösterir. |
 | MC panosu | MC projesinin pano verilerini özetler. |
 | Etiket eşitleme | Olka etiketlerini `CLLINK` ile eşleşen Hebiar tasklarına birebir uygular. |
-| Task oluşturma | Hebiar Jira üzerinde yeni task oluşturur. |
+| Task oluşturma | Hebiar Jira üzerinde yeni task oluşturur; proje listesi ve oluşturma API'si aktif tenantın izinli proje key'leriyle sınırlandırılır. |
 | Dışa aktarma | Desteklenen raporları `.xlsx` olarak indirir. |
 | Sprint uyarıları | SMTP yapılandırılmışsa ilgili kişilere uyarı e-postası gönderir. |
 | Kimlik ve kullanıcı yönetimi | CommerceLab veya yerel kullanıcı girişi, çoklu tenant seçimi ve rol bazlı yetkilendirme sağlar. |

@@ -6,7 +6,10 @@ import {
   getCompanyLoginTenant,
   getCompanyTenantOptions,
   getCompanyTenantScopes,
+  getTaskProjectKeys,
+  canCreateTaskInProject,
 } from "../src/auth/constants.js";
+import { authorizeTaskProject } from "../src/auth/task-policy.js";
 
 const owner = {
   id: "owner-1",
@@ -41,6 +44,19 @@ test("CommerceLab login tenant options remain fixed and ordered", () => {
     "CL",
     "HD",
   ]);
+});
+
+test("Task creation projects are restricted to the active tenant", () => {
+  assert.deepEqual(getTaskProjectKeys("OLKA"), ["OLK", "KLA", "ASCS", "SKCH"]);
+  assert.deepEqual(getTaskProjectKeys("KLD"), ["OLK", "KLA", "ASCS", "SKCH"]);
+  assert.deepEqual(getTaskProjectKeys("HD"), ["KFC", "HDV"]);
+  assert.equal(canCreateTaskInProject("HDV", "KFC"), true);
+  assert.equal(canCreateTaskInProject("HD", "MC"), false);
+  assert.equal(canCreateTaskInProject("CL", "MC"), true);
+  assert.throws(
+    () => authorizeTaskProject({ tenant: "HD" }, "MC"),
+    /aktif tenantınız/,
+  );
 });
 
 test("Password reset is enumeration-safe, rate limited, and revokes local sessions", async () => {

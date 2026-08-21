@@ -29,6 +29,28 @@ export const COMPANY_TENANT_SCOPES = Object.freeze({
   HD: Object.freeze(["HDV"]),
 });
 
+const TASK_PROJECT_KEYS_BY_TENANT = Object.freeze({
+  OLKA: Object.freeze(["OLK", "KLA", "ASCS", "SKCH"]),
+  MCC: Object.freeze(["MC", "IMC"]),
+  SCH: Object.freeze(["SOCH"]),
+  A101: Object.freeze(["A101"]),
+  GRC: Object.freeze(["GRAC"]),
+  MRDIY: Object.freeze(["MDY"]),
+  DEC: Object.freeze(["DEC"]),
+  HD: Object.freeze(["KFC", "HDV"]),
+});
+
+const TASK_TENANT_ALIASES = Object.freeze({
+  SKC: "OLKA",
+  SKCP: "OLKA",
+  ASC: "OLKA",
+  BRR: "OLKA",
+  HFV: "OLKA",
+  HTR: "OLKA",
+  KLD: "OLKA",
+  HDV: "HD",
+});
+
 function normalizeCompanyTenant(tenant) {
   return String(tenant || "").trim().toUpperCase();
 }
@@ -56,6 +78,23 @@ export function getCompanyTenantOptions(availableTenants) {
       tenant === "HD" ||
       available.has(tenant) ||
       COMPANY_TENANT_SCOPES[tenant].some((scope) => available.has(scope)),
+  );
+}
+
+export function getTaskProjectKeys(tenant) {
+  const normalizedTenant = normalizeCompanyTenant(tenant);
+  if (normalizedTenant === GLOBAL_ACCESS_TENANT) {
+    return Object.freeze(
+      [...new Set(Object.values(TASK_PROJECT_KEYS_BY_TENANT).flat())].sort(),
+    );
+  }
+  const mappedTenant = TASK_TENANT_ALIASES[normalizedTenant] || normalizedTenant;
+  return TASK_PROJECT_KEYS_BY_TENANT[mappedTenant] || Object.freeze([]);
+}
+
+export function canCreateTaskInProject(tenant, projectKey) {
+  return getTaskProjectKeys(tenant).includes(
+    String(projectKey || "").trim().toUpperCase(),
   );
 }
 

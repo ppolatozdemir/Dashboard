@@ -20,6 +20,13 @@ async function loadTaskFormData() {
         
         projectSelect.innerHTML = options;
         bulkProjectSelect.innerHTML = options;
+        const hasSingleProject = projects.length === 1;
+        if (hasSingleProject) {
+            projectSelect.value = projects[0].key;
+            bulkProjectSelect.value = projects[0].key;
+        }
+        projectSelect.disabled = hasSingleProject;
+        bulkProjectSelect.disabled = hasSingleProject;
         
         // Tüm sprintleri yükle
         await loadAllSprints();
