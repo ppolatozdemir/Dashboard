@@ -6,17 +6,22 @@ import {
   ROLES,
 } from "./constants.js";
 import { parseCookies } from "./cookies.js";
-import { hashPassword, verifyPasswordOrDummy } from "./credentials.js";
+import {
+  hashPassword,
+  hashToken,
+  verifyPasswordOrDummy,
+} from "./credentials.js";
 import { AuthError } from "./error.js";
 import { identityFromCompanyToken } from "./jwt.js";
 import {
   hasGlobalTenantAccess,
   normalizeTenant,
+  normalizeEmail,
   normalizeText,
-  normalizeUsername,
 } from "./normalization.js";
 import { authorizeUserCreation } from "./policy.js";
 import { AuthRepository } from "./repository.js";
+import { NotificationClient } from "./notification-client.js";
 
 export class AuthService {
   constructor({
@@ -27,6 +32,9 @@ export class AuthService {
     applicationId = process.env.USER_SERVICE_APPLICATION_ID || "MainUI",
     authorizationScheme = process.env.USER_SERVICE_AUTH_SCHEME || "Bearer",
     sessionHours = Number(process.env.AUTH_SESSION_HOURS || 8),
+    notificationClient = new NotificationClient(),
+    passwordResetBypassLimits =
+      process.env.PASSWORD_RESET_BYPASS_LIMITS === "true",
   } = {}) {
     this.repository = new AuthRepository(dbPath);
     this.db = this.repository.db;
@@ -39,6 +47,8 @@ export class AuthService {
     this.applicationId = applicationId;
     this.authorizationScheme = authorizationScheme;
     this.sessionHours = sessionHours;
+    this.notificationClient = notificationClient;
+    this.passwordResetBypassLimits = passwordResetBypassLimits;
     this.companyCookie = "dashboard_company_token";
     this.companyTenantFlowCookie = "dashboard_company_tenant_flow";
     this.localCookie = "dashboard_session";
@@ -141,15 +151,18 @@ export class AuthService {
     return this.client.call(endpoint, options);
   }
 
-  async companyLogin({ username, password, tenant }) {
-    username = normalizeText(username);
+  async companyLogin({ email, password, tenant }) {
+    email = normalizeEmail(email);
     tenant = normalizeText(tenant);
-    if (!username || !password) {
-      throw new AuthError(400, "Kullanıcı adı ve şifre zorunludur");
+    if (!email || !password) {
+      throw new AuthError(400, "E-posta ve şifre zorunludur");
     }
     const response = await this.callUserService("/Auth/login", {
       method: "POST",
-      body: tenant ? { username, password, tenant } : { username, password },
+      // The external CommerceLab API still names its email field "username".
+      body: tenant
+        ? { username: email, password, tenant }
+        : { username: email, password },
     });
     const data = response.data || {};
     if (data.token) {
@@ -161,7 +174,7 @@ export class AuthService {
       };
     }
     if (data.status === 401 || response.status === 401) {
-      throw new AuthError(401, "Kullanıcı adı veya şifre hatalı");
+      throw new AuthError(401, "E-posta veya şifre hatalı");
     }
     if (Array.isArray(data.data) && data.data.length > 0) {
       return { kind: "tenant", tenants: data.data };
@@ -204,10 +217,16 @@ export class AuthService {
         ...user,
         salt,
         hash,
-        actorId: actor.id || actor.username,
+        actorId: actor.id || actor.email,
         now,
       });
     } catch (error) {
+      if (
+        error.code === "SQLITE_CONSTRAINT_UNIQUE" &&
+        error.message?.includes("auth_users.email")
+      ) {
+        throw new AuthError(409, "Bu e-posta adresi zaten tanımlı");
+      }
       if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
         throw new AuthError(409, "Bu kullanıcı adı zaten tanımlı");
       }
@@ -242,6 +261,7 @@ export class AuthService {
     if (actor.role !== ROLES.OWNER_ADMIN) {
       throw new AuthError(403, "Kullanıcı silme yetkiniz yok");
     }
+
     const user = this.repository.findUserById(userId);
     if (!user) throw new AuthError(404, "Kullanıcı bulunamadı");
     if (actor.source === "local" && actor.id === user.id) {
@@ -255,15 +275,46 @@ export class AuthService {
     this.repository.deleteMembership(userId, tenant);
   }
 
-  localLogin({ tenant, username, password }) {
-    tenant = normalizeTenant(tenant);
-    username = normalizeUsername(username);
-    if (!username || !password) {
-      throw new AuthError(400, "Kullanıcı adı ve şifre zorunludur");
+  updateUser(actor, userId, input) {
+    if (actor.role !== ROLES.OWNER_ADMIN && actor.role !== ROLES.TENANT_ADMIN) {
+      throw new AuthError(403, "Kullanıcı güncelleme yetkiniz yok");
     }
-    const user = this.repository.findActiveUserByUsername(username);
+    const user = this.repository.findUserById(userId);
+    if (!user) throw new AuthError(404, "Kullanıcı bulunamadı");
+    if (
+      !hasGlobalTenantAccess(actor) &&
+      !this.repository.hasMembership(userId, normalizeTenant(actor.tenant))
+    ) {
+      throw new AuthError(403, "Kullanıcı bu tenant için yetkili değil");
+    }
+    const email = normalizeText(input.email).toLowerCase();
+    if (
+      !email ||
+      email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    ) {
+      throw new AuthError(400, "Geçerli bir e-posta adresi girilmelidir");
+    }
+    try {
+      this.repository.updateUserEmail(userId, email, new Date().toISOString());
+    } catch (error) {
+      if (error.code === "SQLITE_CONSTRAINT_UNIQUE") {
+        throw new AuthError(409, "Bu e-posta adresi zaten tanımlı");
+      }
+      throw error;
+    }
+    return this.getPublicUser(userId);
+  }
+
+  localLogin({ tenant, email, password }) {
+    tenant = normalizeTenant(tenant);
+    email = normalizeEmail(email);
+    if (!email || !password) {
+      throw new AuthError(400, "E-posta ve şifre zorunludur");
+    }
+    const user = this.repository.findActiveUserByEmail(email);
     if (!user || !verifyPasswordOrDummy(password, user)) {
-      throw new AuthError(401, "Kullanıcı adı veya şifre hatalı");
+      throw new AuthError(401, "E-posta veya şifre hatalı");
     }
     const tenants = this.getUserTenants(user.id);
     if (!tenant && tenants.length > 1) {
@@ -304,7 +355,7 @@ export class AuthService {
   identityFromLocalUser(user, tenant, expiresAt) {
     return {
       id: user.id,
-      username: user.username,
+      email: user.email,
       displayName: user.display_name,
       role: user.role,
       tenant,
@@ -327,6 +378,188 @@ export class AuthService {
 
   deleteLocalSession(token) {
     if (token) this.repository.deleteLocalSession(token);
+  }
+
+  async requestPasswordReset({ email, requestIp } = {}) {
+    const normalizedEmail = normalizeText(email).toLowerCase();
+    const genericResponse = {
+      message:
+        "E-posta adresi kayıtlıysa, şifre sıfırlama kodu gönderilecektir.",
+    };
+    if (
+      !normalizedEmail ||
+      normalizedEmail.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+    ) {
+      console.warn("[Password reset] Request ignored: invalid email format");
+      return genericResponse;
+    }
+
+    const user = this.repository.findActiveUserByEmail(normalizedEmail);
+    if (!user || user.role !== ROLES.TENANT_ADMIN) {
+      console.warn("[Password reset] Request ignored: no eligible local TenantAdmin", {
+        email: normalizedEmail,
+        userFound: Boolean(user),
+        role: user?.role,
+      });
+      return genericResponse;
+    }
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const latest = this.repository.getLatestPasswordResetChallenge(
+      normalizedEmail,
+    );
+    if (
+      !this.passwordResetBypassLimits &&
+      latest &&
+      latest.resend_available_at > nowIso
+    ) {
+      console.warn("[Password reset] Request ignored: cooldown active", {
+        email: normalizedEmail,
+        resendAvailableAt: latest.resend_available_at,
+      });
+      return genericResponse;
+    }
+    const hourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+    if (
+      this.repository.countPasswordResetChallenges(normalizedEmail, hourAgo) >=
+        5 ||
+      this.repository.countPasswordResetChallengesByIp(requestIp, hourAgo) >= 20
+    ) {
+      console.warn("[Password reset] Request ignored: hourly limit reached", {
+        email: normalizedEmail,
+        requestIp,
+      });
+      return genericResponse;
+    }
+
+    const challenge = {
+      id: randomUUID(),
+      userId: user.id,
+      email: normalizedEmail,
+      createdAt: nowIso,
+      expiresAt: new Date(now.getTime() + 15 * 60 * 1000).toISOString(),
+      resendAvailableAt: new Date(now.getTime() + 3 * 60 * 1000).toISOString(),
+      requestIp,
+    };
+    const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+    challenge.otpCodeHash = hashToken(otpCode);
+    this.repository.invalidatePasswordResetChallenges(
+      normalizedEmail,
+      nowIso,
+    );
+    this.repository.createPasswordResetChallenge(challenge);
+    try {
+      console.info("[Password reset] Challenge created; sending notification", {
+        email: normalizedEmail,
+        challengeId: challenge.id,
+        expiresAt: challenge.expiresAt,
+      });
+      await this.notificationClient.sendNotification({
+        email: normalizedEmail,
+        otpCode,
+      });
+      console.info("[Password reset] Notification accepted by provider", {
+        email: normalizedEmail,
+        challengeId: challenge.id,
+      });
+    } catch (error) {
+      console.error("[Password reset] Notification delivery failed", {
+        email: normalizedEmail,
+        challengeId: challenge.id,
+        status: error.status,
+        message: error.message,
+      });
+      this.repository.invalidatePasswordResetChallenges(
+        normalizedEmail,
+        new Date().toISOString(),
+      );
+    }
+    return genericResponse;
+  }
+
+  async verifyPasswordReset({ email, otpCode } = {}) {
+    const normalizedEmail = normalizeText(email).toLowerCase();
+    const code = normalizeText(otpCode);
+    const invalid = () => {
+      throw new AuthError(400, "OTP kodu geçersiz veya süresi dolmuş");
+    };
+    if (
+      !normalizedEmail ||
+      normalizedEmail.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ||
+      !code ||
+      code.length > 32
+    ) {
+      return invalid();
+    }
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const challenge = this.repository.getLatestPasswordResetChallenge(
+      normalizedEmail,
+    );
+    if (
+      !challenge ||
+      !challenge.otp_code_hash ||
+      (!this.passwordResetBypassLimits && challenge.expires_at <= nowIso) ||
+      challenge.consumed_at ||
+      challenge.verified_at ||
+      (!this.passwordResetBypassLimits && challenge.attempt_count >= 5)
+    ) {
+      return invalid();
+    }
+    if (
+      !this.repository.incrementPasswordResetAttempt(
+        challenge.id,
+        this.passwordResetBypassLimits,
+      )
+    ) {
+      return invalid();
+    }
+    const verified = hashToken(code) === challenge.otp_code_hash;
+    if (!verified) return invalid();
+    const resetToken = randomBytes(32).toString("base64url");
+    if (
+      !this.repository.markPasswordResetVerified(
+        challenge.id,
+        hashToken(resetToken),
+        nowIso,
+      )
+    ) {
+      return invalid();
+    }
+    return {
+      resetToken,
+      expiresAt: challenge.expires_at,
+    };
+  }
+
+  resetPassword({ resetToken, password } = {}) {
+    const token = normalizeText(resetToken);
+    if (!token || typeof password !== "string" || password.length < 10 || password.length > 200) {
+      throw new AuthError(400, "Şifre 10-200 karakter arasında olmalıdır");
+    }
+    const challenge = this.repository.findPasswordResetByToken(
+      hashToken(token),
+      new Date().toISOString(),
+      this.passwordResetBypassLimits,
+    );
+    if (!challenge) {
+      throw new AuthError(400, "Şifre sıfırlama bağlantısı geçersiz veya süresi dolmuş");
+    }
+    const { salt, hash } = hashPassword(password);
+    if (
+      !this.repository.completePasswordReset({
+        challengeId: challenge.id,
+        userId: challenge.user_id,
+        salt,
+        hash,
+        now: new Date().toISOString(),
+      })
+    ) {
+      throw new AuthError(400, "Şifre sıfırlama işlemi tamamlanamadı");
+    }
   }
 
   async authenticateRequest(req) {

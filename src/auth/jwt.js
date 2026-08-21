@@ -33,7 +33,7 @@ export function identityFromCompanyToken(token) {
 
   return {
     id: payload[CLAIMS.id] || payload.jti,
-    username: payload[CLAIMS.name] || "",
+    email: payload[CLAIMS.name] || "",
     displayName: displayName || payload[CLAIMS.name] || "CommerceLab kullanıcısı",
     role,
     tenant: tenant || null,

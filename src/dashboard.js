@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import "./lib/load-env.js";
 import dashboardServer from "./lib/dashboard-server.js";
 import { isConfigured } from "./lib/config.js";
 
