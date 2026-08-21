@@ -136,14 +136,14 @@ export function exportHdvStatus(req, res) {
 }
 
 export function olkaSprintReport(req, res) {
-  return runConfigured(res, "Olka Sprint Rapor hatası", async () => {
+  return runConfigured(res, "Sprint Raporu hatası", async () => {
     const service = (await import("../../lib/olka-sprint-report.js")).default;
     res.json(await service.getSprintReport(req.query.sprintId));
   });
 }
 
 export function exportOlkaSprint(req, res) {
-  return runConfigured(res, "Olka Sprint Rapor Excel export hatası", async () => {
+  return runConfigured(res, "Sprint Raporu Excel export hatası", async () => {
     const data = req.body || {};
     if (!data.stats || !Array.isArray(data.rows)) {
       return res.status(400).json({
