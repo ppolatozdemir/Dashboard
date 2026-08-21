@@ -3,11 +3,13 @@ import test from "node:test";
 import { AuthService, ROLES } from "../src/lib/auth-service.js";
 import {
   COMPANY_LOGIN_TENANTS,
+  getAccessiblePages,
   getCompanyLoginTenant,
   getCompanyTenantOptions,
   getCompanyTenantScopes,
   getTaskProjectKeys,
   canCreateTaskInProject,
+  PAGES,
 } from "../src/auth/constants.js";
 import { authorizeTaskProject } from "../src/auth/task-policy.js";
 
@@ -57,6 +59,68 @@ test("Task creation projects are restricted to the active tenant", () => {
     () => authorizeTaskProject({ tenant: "HD" }, "MC"),
     /aktif tenantınız/,
   );
+});
+
+test("page access follows the owner and tenant access plan", () => {
+  assert.deepEqual(
+    getAccessiblePages({ role: ROLES.OWNER_ADMIN, tenant: "CL" }),
+    [
+      PAGES.DAILY,
+      PAGES.CLOSED,
+      PAGES.UNSPRINTED,
+      PAGES.RFR,
+      PAGES.REJECT,
+      PAGES.OLKA_SPRINT,
+      PAGES.PROJECT_REPORT,
+      PAGES.CREATE_TASK,
+      PAGES.PROJECT_BOARD,
+    ],
+  );
+
+  const olkaAdminPages = getAccessiblePages({
+    role: ROLES.TENANT_ADMIN,
+    tenant: "OLKA",
+  });
+  assert.ok(olkaAdminPages.includes(PAGES.LABEL_SYNC));
+  assert.ok(olkaAdminPages.includes(PAGES.OLKA_DEPLOY));
+  assert.ok(olkaAdminPages.includes(PAGES.OLKA_ROADMAP));
+  assert.ok(!olkaAdminPages.includes(PAGES.DAILY));
+
+  const hdAdminPages = getAccessiblePages({
+    role: ROLES.TENANT_ADMIN,
+    tenant: "HD",
+  });
+  assert.ok(hdAdminPages.includes(PAGES.HDV_STATUS));
+  assert.ok(!hdAdminPages.includes(PAGES.OLKA_DEPLOY));
+});
+
+test("page middleware rejects pages outside the access plan", () => {
+  const service = createService();
+  const denied = { statusCode: null, body: null };
+  let proceeded = false;
+
+  service.requirePageAccess(PAGES.DAILY)(
+    { auth: { role: ROLES.TENANT_ADMIN, tenant: "KLD" } },
+    {
+      status(code) {
+        denied.statusCode = code;
+        return this;
+      },
+      json(body) {
+        denied.body = body;
+      },
+    },
+    () => {
+      proceeded = true;
+    },
+  );
+
+  assert.equal(proceeded, false);
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(denied.body, {
+    error: "Bu sayfaya erişim yetkiniz yok",
+  });
+  service.close();
 });
 
 test("Password reset is enumeration-safe, rate limited, and revokes local sessions", async () => {
