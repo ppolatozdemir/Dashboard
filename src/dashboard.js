@@ -22,7 +22,7 @@ process.on("unhandledRejection", (reason) => {
 });
 
 async function start() {
-  console.log("\n🚀 Jira Support Dashboard başlatılıyor...\n");
+  console.log("\n🚀 LAB Board başlatılıyor...\n");
 
   if (!isConfigured()) {
     console.error("❌ Jira yapılandırması eksik!");

@@ -68,7 +68,6 @@ test("page access follows the owner and tenant access plan", () => {
     [
       PAGES.DAILY,
       PAGES.CLOSED,
-      PAGES.UNSPRINTED,
       PAGES.RFR,
       PAGES.REJECT,
       PAGES.OLKA_SPRINT,
@@ -82,6 +81,7 @@ test("page access follows the owner and tenant access plan", () => {
     role: ROLES.TENANT_ADMIN,
     tenant: "OLKA",
   });
+  assert.ok(olkaAdminPages.includes(PAGES.UNSPRINTED));
   assert.ok(olkaAdminPages.includes(PAGES.LABEL_SYNC));
   assert.ok(olkaAdminPages.includes(PAGES.OLKA_DEPLOY));
   assert.ok(olkaAdminPages.includes(PAGES.OLKA_ROADMAP));
