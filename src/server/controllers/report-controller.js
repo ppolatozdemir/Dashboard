@@ -30,6 +30,52 @@ async function runConfigured(res, label, operation) {
   }
 }
 
+export function olkaUnsprintedSprints(req, res) {
+  return runConfigured(res, "Olka sprint listesi hatası", async () => {
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    res.json(await service.getOlkaSprints());
+  });
+}
+
+export function hebiarUnsprintedSprints(req, res) {
+  return runConfigured(res, "Hebiar sprint listesi hatası", async () => {
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    res.json(await service.getHebiarSprints());
+  });
+}
+
+export function unsprintedReport(req, res) {
+  return runConfigured(res, "Sprinte alınmayan rapor hatası", async () => {
+    const { olkaSprintId, hebiarSprintId } = req.query;
+    if (!olkaSprintId || !hebiarSprintId) {
+      return res
+        .status(400)
+        .json({ error: "Olka ve Hebiar sprint seçimi zorunludur" });
+    }
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    res.json(await service.getUnsprintedTasks(olkaSprintId, hebiarSprintId));
+  });
+}
+
+export function exportUnsprinted(req, res) {
+  return runConfigured(res, "Sprinte alınmayan Excel export hatası", async () => {
+    const { rows, olkaSprintName, hebiarSprintName, olkaTotal, hebiarTotal } =
+      req.body || {};
+    if (!validateRows(res, rows)) return;
+    const service = (await import("../../lib/unsprinted-report.js")).default;
+    const buffer = await service.buildUnsprintedXlsxBuffer(rows, {
+      olkaSprintName,
+      hebiarSprintName,
+      olkaTotal,
+      hebiarTotal,
+    });
+    const safe = (text) =>
+      (text || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
+    const filename = `sprinte-alinmayan_${safe(olkaSprintName) || "olka"}_vs_${safe(hebiarSprintName) || "hebiar"}_${dateStamp()}.xlsx`;
+    sendXlsx(res, buffer, filename);
+  });
+}
+
 export function olkaDeployReport(req, res) {
   return runConfigured(res, "Olka Deploy rapor hatası", async () => {
     const service = (await import("../../lib/olka-deploy-report.js")).default;
