@@ -15,7 +15,6 @@ const HEBIAR_BASE_URL = (
   process.env.HEBIAR_BASE_URL || "https://hebiar.atlassian.net"
 ).replace(/\/$/, "");
 
-const PROJECT_KEY = process.env.MC_BOARD_PROJECT || "MC";
 // "Tamamlandı" (Done) kategorisindeki maddeler on binlerce olabildiğinden pano
 // yalnızca son N gün içinde güncellenen Done maddelerini kart olarak gösterir.
 const RECENT_DAYS = parseInt(process.env.MC_BOARD_RECENT_DAYS || "45", 10);
@@ -85,18 +84,19 @@ class McBoardReportService {
     }
   }
 
-  /** MC projesinin Kanban board'unu bulur (tercihen "simple"/kanban tipi). */
-  async _getBoard() {
+  /** Projenin simple/Kanban board'unu bulur; yoksa Jira'nın ilk görünür board'u kullanılır. */
+  async _getBoard(projectKey) {
     const headers = this.getAuthHeader();
     const res = await axios.get(`${HEBIAR_BASE_URL}/rest/agile/1.0/board`, {
-      params: { projectKeyOrId: PROJECT_KEY },
+      params: { projectKeyOrId: projectKey },
       headers,
     });
     const boards = res.data.values || [];
     if (!boards.length) return null;
-    return (
-      boards.find((b) => (b.type || "").toLowerCase() !== "scrum") || boards[0]
-    );
+    return boards.find((board) => {
+      const type = String(board.type || "").toLowerCase();
+      return type === "simple" || type === "kanban";
+    }) || boards[0];
   }
 
   /** Board'un sütun yapılandırmasını (sıralı sütunlar + eşlenen statü id'leri) döner. */
@@ -113,10 +113,10 @@ class McBoardReportService {
   }
 
   /** Projede kullanılan statülerin id -> {name, category} eşlemesini döner. */
-  async _getStatusMeta() {
+  async _getStatusMeta(projectKey) {
     const headers = this.getAuthHeader();
     const res = await axios.get(
-      `${HEBIAR_BASE_URL}/rest/api/3/project/${PROJECT_KEY}/statuses`,
+      `${HEBIAR_BASE_URL}/rest/api/3/project/${encodeURIComponent(projectKey)}/statuses`,
       { headers },
     );
     const map = {};
@@ -159,7 +159,7 @@ class McBoardReportService {
     };
   }
 
-  async getBoardData() {
+  async getBoardData(projectKey) {
     const fields = [
       "summary",
       "status",
@@ -170,25 +170,26 @@ class McBoardReportService {
       "updated",
     ];
 
-    const statusMeta = await this._getStatusMeta();
-    const board = await this._resolveBoard(statusMeta);
-    const activeJql = `project = "${PROJECT_KEY}" AND statusCategory != Done ORDER BY updated DESC`;
-    const doneJql = `project = "${PROJECT_KEY}" AND statusCategory = Done AND updated >= -${RECENT_DAYS}d ORDER BY updated DESC`;
+    const statusMeta = await this._getStatusMeta(projectKey);
+    const board = await this._resolveBoard(projectKey, statusMeta);
+    const activeJql = `project = "${projectKey}" AND statusCategory != Done ORDER BY updated DESC`;
+    const doneJql = `project = "${projectKey}" AND statusCategory = Done AND updated >= -${RECENT_DAYS}d ORDER BY updated DESC`;
     const [activeIssues, doneIssues] = await Promise.all([
       this._searchAllJql(activeJql, fields),
       this._searchAllJql(doneJql, fields, DONE_FETCH_CAP),
     ]);
     const rows = [...activeIssues, ...doneIssues].map((i) => this._mapIssue(i));
     const { columns, totalTrue } = await this._buildColumns(
+      projectKey,
       board.columns,
       statusMeta,
       this._groupByStatus(rows),
     );
     return {
-      project: PROJECT_KEY,
+      project: projectKey,
       projectName: board.name
         ? board.name.replace(/\s*board$/i, "").trim()
-        : PROJECT_KEY,
+        : projectKey,
       boardId: board.id,
       boardName: board.name,
       recentDays: RECENT_DAYS,
@@ -199,10 +200,10 @@ class McBoardReportService {
     };
   }
 
-  async _resolveBoard(statusMeta) {
+  async _resolveBoard(projectKey, statusMeta) {
     let board = { id: null, name: null, columns: null };
     try {
-      const selected = await this._getBoard();
+      const selected = await this._getBoard(projectKey);
       if (selected) {
         board = {
           id: selected.id,
@@ -229,7 +230,7 @@ class McBoardReportService {
     return grouped;
   }
 
-  async _buildColumns(definitions, statusMeta, byStatus) {
+  async _buildColumns(projectKey, definitions, statusMeta, byStatus) {
     const columns = [];
     let totalTrue = 0;
     for (const definition of definitions) {
@@ -237,7 +238,7 @@ class McBoardReportService {
       const cards = statusIds.flatMap((id) => byStatus.get(id) || []);
       cards.sort((a, b) => new Date(b.updated || 0) - new Date(a.updated || 0));
       const shown = cards.slice(0, DISPLAY_CAP);
-      const count = await this._columnCount(statusIds, cards.length);
+      const count = await this._columnCount(projectKey, statusIds, cards.length);
       totalTrue += count;
       const knownStatus = statusIds.find((id) => statusMeta[id]);
       columns.push({
@@ -255,9 +256,9 @@ class McBoardReportService {
     return { columns, totalTrue };
   }
 
-  async _columnCount(statusIds, fallback) {
+  async _columnCount(projectKey, statusIds, fallback) {
     if (!statusIds.length) return fallback;
-    const jql = `project = "${PROJECT_KEY}" AND status in (${statusIds.join(
+    const jql = `project = "${projectKey}" AND status in (${statusIds.join(
       ",",
     )})`;
     return (await this._approxCount(jql)) ?? fallback;

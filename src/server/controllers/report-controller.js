@@ -4,6 +4,21 @@ import {
   sendXlsx,
   validateRows,
 } from "./controller-utils.js";
+import { taskProjectKeysFor } from "../../auth/task-policy.js";
+import { AuthError } from "../../auth/error.js";
+
+function authorizedProjectKeys(req) {
+  return taskProjectKeysFor(req.auth);
+}
+
+function authorizeBoardProject(req, projectKey) {
+  const allowed = authorizedProjectKeys(req);
+  const normalized = String(projectKey || "").trim().toUpperCase();
+  if (!normalized || !allowed.includes(normalized)) {
+    throw new AuthError(403, "Seçilen proje aktif tenantınız için yetkili değil");
+  }
+  return normalized;
+}
 
 async function runConfigured(res, label, operation) {
   if (!requireConfiguration(res)) return;
@@ -11,54 +26,8 @@ async function runConfigured(res, label, operation) {
     await operation();
   } catch (error) {
     console.error(`${label}:`, error.message);
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
-}
-
-export function olkaUnsprintedSprints(req, res) {
-  return runConfigured(res, "Olka sprint listesi hatası", async () => {
-    const service = (await import("../../lib/unsprinted-report.js")).default;
-    res.json(await service.getOlkaSprints());
-  });
-}
-
-export function hebiarUnsprintedSprints(req, res) {
-  return runConfigured(res, "Hebiar sprint listesi hatası", async () => {
-    const service = (await import("../../lib/unsprinted-report.js")).default;
-    res.json(await service.getHebiarSprints());
-  });
-}
-
-export function unsprintedReport(req, res) {
-  return runConfigured(res, "Sprinte alınmayan rapor hatası", async () => {
-    const { olkaSprintId, hebiarSprintId } = req.query;
-    if (!olkaSprintId || !hebiarSprintId) {
-      return res
-        .status(400)
-        .json({ error: "Olka ve Hebiar sprint seçimi zorunludur" });
-    }
-    const service = (await import("../../lib/unsprinted-report.js")).default;
-    res.json(await service.getUnsprintedTasks(olkaSprintId, hebiarSprintId));
-  });
-}
-
-export function exportUnsprinted(req, res) {
-  return runConfigured(res, "Excel export hatası", async () => {
-    const { rows, olkaSprintName, hebiarSprintName, olkaTotal, hebiarTotal } =
-      req.body || {};
-    if (!validateRows(res, rows)) return;
-    const service = (await import("../../lib/unsprinted-report.js")).default;
-    const buffer = await service.buildUnsprintedXlsxBuffer(rows, {
-      olkaSprintName,
-      hebiarSprintName,
-      olkaTotal,
-      hebiarTotal,
-    });
-    const safe = (text) =>
-      (text || "").replace(/[^\w.-]+/g, "_").replace(/^_+|_+$/g, "");
-    const filename = `sprinte-alinmayan_${safe(olkaSprintName) || "olka"}_vs_${safe(hebiarSprintName) || "hebiar"}_${dateStamp()}.xlsx`;
-    sendXlsx(res, buffer, filename);
-  });
 }
 
 export function olkaDeployReport(req, res) {
@@ -101,18 +70,22 @@ export function exportRfr(req, res) {
 export function rejectReport(req, res) {
   return runConfigured(res, "Reject Takip rapor hatası", async () => {
     const service = (await import("../../lib/reject-report.js")).default;
-    res.json(await service.getRejectTasks());
+    res.json(await service.getRejectTasks(authorizedProjectKeys(req)));
   });
 }
 
 export function exportReject(req, res) {
   return runConfigured(res, "Reject Takip Excel export hatası", async () => {
-    const { rows, statuses, projectCount } = req.body || {};
+    const { rows, statuses } = req.body || {};
     if (!validateRows(res, rows)) return;
+    const allowedProjectKeys = new Set(authorizedProjectKeys(req));
+    const scopedRows = rows.filter((row) =>
+      allowedProjectKeys.has(String(row.projectKey || "").trim().toUpperCase()),
+    );
     const service = (await import("../../lib/reject-report.js")).default;
-    const buffer = await service.buildRejectXlsxBuffer(rows, {
+    const buffer = await service.buildRejectXlsxBuffer(scopedRows, {
       statuses,
-      projectCount,
+      projectCount: new Set(scopedRows.map((row) => row.projectKey)).size,
     });
     sendXlsx(res, buffer, `reject-takip_${dateStamp()}.xlsx`);
   });
@@ -173,19 +146,20 @@ export function projectReportSprints(req, res) {
 export function projectReportBreakdown(req, res) {
   return runConfigured(res, "Proje Raporu kırılım hatası", async () => {
     const service = (await import("../../lib/project-report.js")).default;
-    res.json(await service.getBreakdown(req.query.sprintId));
+    res.json(await service.getBreakdown(req.query.sprintId, authorizedProjectKeys(req)));
   });
 }
 
 export function exportProjectReport(req, res) {
   return runConfigured(res, "Proje Raporu Excel export hatası", async () => {
-    const data = req.body || {};
-    if (!Array.isArray(data.projects)) {
+    const sprintId = req.body?.sprintId;
+    if (!sprintId) {
       return res.status(400).json({
-        error: "Geçersiz veri: proje kırılımı (projects) gerekli",
+        error: "Sprint seçimi gerekli",
       });
     }
     const service = (await import("../../lib/project-report.js")).default;
+    const data = await service.getBreakdown(sprintId, authorizedProjectKeys(req));
     const buffer = await service.buildXlsxBuffer(data);
     const sprintName = (
       data.sprint && data.sprint.name ? data.sprint.name : "sprint"
@@ -216,7 +190,15 @@ export function syncLabels(req, res) {
 export function mcBoardReport(req, res) {
   return runConfigured(res, "MC Panosu rapor hatası", async () => {
     const service = (await import("../../lib/mc-board-report.js")).default;
-    res.json(await service.getBoardData());
+    const projectKey = authorizeBoardProject(req, req.query.projectKey);
+    res.json(await service.getBoardData(projectKey));
+  });
+}
+
+export function tenantBoardProjects(req, res) {
+  return runConfigured(res, "Tenant pano proje listesi hatası", async () => {
+    const projectKeys = authorizedProjectKeys(req);
+    res.json({ projectKeys });
   });
 }
 

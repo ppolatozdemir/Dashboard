@@ -4,6 +4,8 @@ import { createTask } from "../controllers/task-controller.js";
 export function registerDashboardRoutes(app) {
   app.get("/api/config/status", dashboard.configStatus);
   app.get("/api/projects", dashboard.projects);
+  app.get("/api/tenant-projects", dashboard.tenantProjects);
+  app.put("/api/tenant-projects/:tenant", dashboard.updateTenantProjects);
   app.get("/api/people/:projectKey", dashboard.people);
   app.get("/api/daily-report", dashboard.dailyReport);
   app.get("/api/daily-closed", dashboard.dailyClosed);

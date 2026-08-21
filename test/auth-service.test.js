@@ -7,11 +7,12 @@ import {
   getCompanyLoginTenant,
   getCompanyTenantOptions,
   getCompanyTenantScopes,
-  getTaskProjectKeys,
-  canCreateTaskInProject,
   PAGES,
 } from "../src/auth/constants.js";
-import { authorizeTaskProject } from "../src/auth/task-policy.js";
+import {
+  authorizeTaskProject,
+  taskProjectKeysFor,
+} from "../src/auth/task-policy.js";
 
 const owner = {
   id: "owner-1",
@@ -49,17 +50,39 @@ test("CommerceLab login tenant options remain fixed and ordered", () => {
   ]);
 });
 
-test("Task creation projects are restricted to the active tenant", () => {
-  assert.deepEqual(getTaskProjectKeys("OLKA"), ["OLK", "KLA", "ASCS", "SKCH"]);
-  assert.deepEqual(getTaskProjectKeys("KLD"), ["OLK", "KLA", "ASCS", "SKCH"]);
-  assert.deepEqual(getTaskProjectKeys("HD"), ["KFC", "HDV"]);
-  assert.equal(canCreateTaskInProject("HDV", "KFC"), true);
-  assert.equal(canCreateTaskInProject("HD", "MC"), false);
-  assert.equal(canCreateTaskInProject("CL", "MC"), true);
-  assert.throws(
-    () => authorizeTaskProject({ tenant: "HD" }, "MC"),
-    /aktif tenantınız/,
-  );
+test("Tenant project mappings scope task creation and persist admin changes", () => {
+  const service = createService();
+  try {
+    assert.deepEqual(taskProjectKeysFor({ tenant: "OLKA" }, service.repository), [
+      "ASCS",
+      "KLA",
+      "OLK",
+      "SKCH",
+    ]);
+    assert.deepEqual(taskProjectKeysFor({ tenant: "HDV" }, service.repository), [
+      "HDV",
+      "KFC",
+    ]);
+    assert.ok(taskProjectKeysFor({ tenant: "CL" }, service.repository).includes("MC"));
+    assert.throws(
+      () => authorizeTaskProject({ tenant: "HD" }, "MC", service.repository),
+      /aktif tenantınız/,
+    );
+
+    service.repository.replaceTenantProjects(
+      "MCC",
+      [{ key: "OLK", name: "Olka" }],
+      "owner-1",
+    );
+    assert.ok(!taskProjectKeysFor({ tenant: "OLKA" }, service.repository).includes("OLK"));
+    assert.deepEqual(taskProjectKeysFor({ tenant: "MCC" }, service.repository), [
+      "OLK",
+    ]);
+    service.repository.replaceTenantProjects("MCC", [], "owner-1");
+    assert.deepEqual(taskProjectKeysFor({ tenant: "MCC" }, service.repository), []);
+  } finally {
+    service.close();
+  }
 });
 
 test("page access follows the owner and tenant access plan", () => {
@@ -68,13 +91,13 @@ test("page access follows the owner and tenant access plan", () => {
     [
       PAGES.DAILY,
       PAGES.CLOSED,
-      PAGES.UNSPRINTED,
       PAGES.RFR,
       PAGES.REJECT,
-      PAGES.OLKA_SPRINT,
       PAGES.PROJECT_REPORT,
       PAGES.CREATE_TASK,
       PAGES.PROJECT_BOARD,
+      PAGES.OLKA_SPRINT,
+      PAGES.TENANT_MANAGEMENT,
     ],
   );
 
@@ -85,6 +108,7 @@ test("page access follows the owner and tenant access plan", () => {
   assert.ok(olkaAdminPages.includes(PAGES.LABEL_SYNC));
   assert.ok(olkaAdminPages.includes(PAGES.OLKA_DEPLOY));
   assert.ok(olkaAdminPages.includes(PAGES.OLKA_ROADMAP));
+  assert.ok(olkaAdminPages.includes(PAGES.OLKA_SPRINT));
   assert.ok(!olkaAdminPages.includes(PAGES.DAILY));
 
   const hdAdminPages = getAccessiblePages({
@@ -93,6 +117,17 @@ test("page access follows the owner and tenant access plan", () => {
   });
   assert.ok(hdAdminPages.includes(PAGES.HDV_STATUS));
   assert.ok(!hdAdminPages.includes(PAGES.OLKA_DEPLOY));
+  assert.ok(!hdAdminPages.includes(PAGES.OLKA_SPRINT));
+  assert.ok(!hdAdminPages.includes(PAGES.CLOSED));
+
+  const clTenantAdminPages = getAccessiblePages({
+    role: ROLES.TENANT_ADMIN,
+    tenant: "CL",
+  });
+  assert.ok(clTenantAdminPages.includes(PAGES.DAILY));
+  assert.ok(clTenantAdminPages.includes(PAGES.CLOSED));
+  assert.ok(clTenantAdminPages.includes(PAGES.OLKA_SPRINT));
+  assert.ok(!clTenantAdminPages.includes(PAGES.TENANT_MANAGEMENT));
 });
 
 test("page middleware rejects pages outside the access plan", () => {

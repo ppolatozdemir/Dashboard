@@ -55,14 +55,14 @@ Dashboard'daki başlıca işlevler:
 | İşlev | Açıklama |
 | --- | --- |
 | İş yükü ve günlük kapanan | Aktif işler ile seçilen tarihte kapanan taskları raporlar. |
-| Sprinte alınmayan | Olka sprintindeki taskları `CLLINK` alanıyla Hebiar sprintiyle karşılaştırır. |
 | Olka Deploy | Belirlenen deploy durumundaki Olka tasklarını listeler. |
-| RFR ve Reject takibi | Ready for Release ve reject/return durumlarındaki işleri raporlar. |
+| RFR ve Reject takibi | Ready for Release işlerini ve aktif tenantın projelerindeki reject/return durumlarını raporlar. |
 | HDV son durum | HDV projesinin durum görünümünü üretir. |
 | Sprint, roadmap ve proje raporları | Sprint dağılımı, roadmap ve proje kırılımlarını gösterir. |
-| MC panosu | MC projesinin pano verilerini özetler. |
+| Tenant panosu | Aktif tenantın yetkili projelerinden seçilen projenin Jira board verilerini özetler. |
 | Etiket eşitleme | Olka etiketlerini `CLLINK` ile eşleşen Hebiar tasklarına birebir uygular. |
-| Task oluşturma | Hebiar Jira üzerinde yeni task oluşturur; proje listesi ve oluşturma API'si aktif tenantın izinli proje key'leriyle sınırlandırılır. |
+| Task oluşturma | Hebiar Jira üzerinde yeni task oluşturur; proje listesi ve oluşturma API'si aktif tenantın kalıcı proje eşlemesiyle sınırlandırılır. |
+| Tenant yönetimi | Aktif `CL` tenantındaki `OwnerAdmin`, Jira projelerini üst tenantlara tekil olarak atar veya eşlemeyi kaldırır. |
 | Dışa aktarma | Desteklenen raporları `.xlsx` olarak indirir. |
 | Sprint uyarıları | SMTP yapılandırılmışsa ilgili kişilere uyarı e-postası gönderir. |
 | Kimlik ve kullanıcı yönetimi | CommerceLab veya yerel kullanıcı girişi, çoklu tenant seçimi ve rol bazlı yetkilendirme sağlar. |
@@ -246,8 +246,12 @@ Geçici geliştirme/test ortamında OTP cooldown, süre ve deneme sınırını d
 
 ### Tenant sekme erişimi
 
-- Aktif tenantı `CL` olan kullanıcılar tüm rapor sekmelerini görür.
-- Yerel `MCC` tenant kullanıcıları MC Panosu sekmesine ve API'sine erişebilir.
+- Task Oluştur, Proje Raporu ve Tenant Panosu; SQLite'taki aynı `tenant -> projectKey[]` eşlemesini sunucu tarafında kullanır. `CL` bu eşlemelerdeki tüm projeleri görür.
+- Tenant Panosu, birden fazla board varsa `simple`/Kanban board'u tercih eder; yoksa Jira'nın ilk görünür board'unu kullanır.
+- Sprint Raporu OLKA verisine özeldir; yalnız aktif `OLKA` veya `CL` tenantında görünür.
+- Reject Takip yalnız aktif tenantın kalıcı proje eşlemesindeki Jira projelerini sorgular.
+- İş Yükü ve Günlük Kapanan yalnız aktif tenantı `CL` olan `OwnerAdmin` ve `TenantAdmin` için açıktır.
+- Tenant Yönetimi yalnız aktif tenantı `CL` olan `OwnerAdmin` için açıktır.
 - Yerel kullanıcılar için özel `HDV` tenantı tanımlanabilir; bu tenant HDV Son Durum sekmesine ve API'sine erişir.
 - Yerel kullanıcılar için eşleşmeyen tenant sekmeleri arayüzde gizlenir ve API katmanında `403` ile engellenir.
 

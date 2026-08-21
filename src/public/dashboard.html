@@ -41,7 +41,6 @@
         <div class="sidebar-label">Raporlar ve işlemler</div>
         <button type="button" class="tab-btn active" id="tabDaily" onclick="switchTab('daily')">📋 İş Yükü</button>
         <button type="button" class="tab-btn" id="tabClosed" onclick="switchTab('closed')">✅ Günlük Kapanan</button>
-        <button type="button" class="tab-btn" id="tabUnsprinted" onclick="switchTab('unsprinted')">🚫 Sprinte Alınmayan</button>
         <button type="button" class="tab-btn" id="tabOlkaDeploy" onclick="switchTab('olkaDeploy')">🚀 Olka Deploy</button>
         <button type="button" class="tab-btn" id="tabRfr" onclick="switchTab('rfr')">🚦 RFR Takip</button>
         <button type="button" class="tab-btn" id="tabReject" onclick="switchTab('reject')">⛔ Reject Takip</button>
@@ -52,6 +51,7 @@
         <button type="button" class="tab-btn" id="tabMcBoard" onclick="switchTab('mcBoard')">🗂️ Proje Panosu</button>
         <button type="button" class="tab-btn" id="tabProject" onclick="switchTab('project')">📊 Proje Raporu</button>
         <button type="button" class="tab-btn" id="tabCreateTask" onclick="switchTab('createTask')">➕ Task Oluştur</button>
+        <button type="button" class="tab-btn" id="tabTenantManagement" onclick="switchTab('tenantManagement')">⚙️ Tenant Yönetimi</button>
     </nav>
     
     <!-- Günlük İş Yükü Raporu Tab İçeriği -->
@@ -93,44 +93,6 @@
             <div id="closedReportContent">
                 <div class="loading" style="height: 200px;">
                     <span>Kapanan task raporu yükleniyor...</span>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Sprinte Alınmayan Tab İçeriği -->
-    <div class="tab-content" id="unsprintedTabContent">
-        <div class="daily-report-panel">
-            <div class="daily-report-header">
-                <h2>🚫 Sprinte Alınmayan Tasklar</h2>
-                <div class="daily-report-controls">
-                    <button class="refresh-btn" onclick="loadUnsprintedSprints()">🔄 Sprintleri Yenile</button>
-                    <button class="refresh-btn" onclick="loadUnsprintedReport()" style="background: #4361ee;">🔍 Karşılaştır</button>
-                    <button class="refresh-btn" id="exportExcelBtn" onclick="exportUnsprintedExcel()" style="background: #1d6f42;">📥 Excel İndir</button>
-                </div>
-            </div>
-            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
-                Olka <strong>(E-COMM DEVELOPMENT TEAM)</strong> sprintinde olup, seçilen Hebiar <strong>(weekly)</strong> sprintine <strong>alınmamış</strong> tasklar listelenir.
-                Eşleştirme, Olka taskındaki <code>CLLINK</code> alanına göre yapılır.
-            </p>
-            <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
-                <div style="flex: 1; min-width: 260px;">
-                    <label style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px;">🟦 Olka Sprint (E-COMM DEVELOPMENT TEAM)</label>
-                    <select class="form-select" id="olkaSprintSelect" style="width: 100%;">
-                        <option value="">Sprintler yükleniyor...</option>
-                    </select>
-                </div>
-                <div style="flex: 1; min-width: 260px;">
-                    <label style="display: block; margin-bottom: 6px; color: var(--text-secondary); font-size: 13px;">🟩 Hebiar Weekly Sprint</label>
-                    <select class="form-select" id="hebiarSprintSelect" style="width: 100%;">
-                        <option value="">Sprintler yükleniyor...</option>
-                    </select>
-                </div>
-            </div>
-            <div id="unsprintedInfoBar" style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;"></div>
-            <div id="unsprintedReportContent">
-                <div style="text-align: center; padding: 30px; color: var(--text-muted);">
-                    İki sprint seçip <strong>"Karşılaştır"</strong> butonuna tıklayın.
                 </div>
             </div>
         </div>
@@ -307,14 +269,15 @@
     <div class="tab-content" id="mcBoardTabContent">
         <div class="daily-report-panel">
             <div class="daily-report-header">
-                <h2>🗂️ MC Panosu — Madame Coco</h2>
+                <h2 id="tenantBoardTitle">🗂️ Tenant Panosu</h2>
                 <div class="daily-report-controls">
+                    <label class="filter-label" for="tenantBoardProjectSelect">Proje:</label>
+                    <select class="form-select" id="tenantBoardProjectSelect" onchange="onTenantBoardProjectChange()" style="min-width: 220px;"></select>
                     <button class="refresh-btn" onclick="loadMcBoardReport()">🔄 Yenile</button>
                 </div>
             </div>
             <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
-                Hebiar Jira <strong>MC (Madame Coco)</strong> projesinin maddeleri, projenin gerçek Kanban board
-                sütun düzenine göre <strong>statü bazında</strong> kolonlara ayrılır. Sütun başlığındaki sayı o statüdeki
+                Seçilen projenin gerçek Jira board sütun düzenine göre maddeler <strong>statü bazında</strong> kolonlara ayrılır. Sütun başlığındaki sayı o statüdeki
                 <strong>toplam</strong> madde sayısıdır; <em>Tamamlandı</em> kategorisinde performans için yalnızca
                 <strong id="mcBoardRecentLabel">son 45 gün</strong> içinde güncellenen kartlar gösterilir.
                 Karta tıklayarak Jira'da açabilirsiniz.
@@ -322,9 +285,28 @@
             <div id="mcBoardInfoBar" style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;"></div>
             <div id="mcBoardContent">
                 <div class="mc-empty">
-                    <strong>"Yenile"</strong> butonuna tıklayarak MC panosunu yükleyin.
+                    Bir proje seçerek tenant panosunu yükleyin.
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="tab-content" id="tenantManagementTabContent">
+        <div class="daily-report-panel">
+            <div class="daily-report-header">
+                <h2>⚙️ Tenant Yönetimi</h2>
+                <button class="refresh-btn" onclick="loadTenantManagement()">🔄 Yenile</button>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 13px;">
+                Bir proje yalnız bir üst tenanta atanabilir. Kaydedilen projeler önceki tenant eşlemesinden atomik olarak taşınır.
+            </p>
+            <div class="daily-report-controls" style="margin-bottom: 15px;">
+                <label class="filter-label" for="tenantManagementSelect">Tenant:</label>
+                <select class="form-select" id="tenantManagementSelect" onchange="renderTenantManagementProjects()" style="min-width: 180px;"></select>
+                <input class="form-input" id="tenantManagementSearch" type="search" placeholder="Proje ara..." oninput="renderTenantManagementProjects()" style="min-width: 220px;">
+                <button class="refresh-btn" onclick="saveTenantManagement()">💾 Kaydet</button>
+            </div>
+            <div id="tenantManagementContent"></div>
         </div>
     </div>
 
@@ -498,20 +480,20 @@ Alerjen ikonu güncellenecek | Remzi Erarslan" required></textarea>
         </div>
     </div>
 
-    <script src="/scripts/core/app-shell.js"></script>
+    <script src="/scripts/core/app-shell.js?v=2"></script>
     <script src="/scripts/shared/capture.js"></script>
     <script src="/scripts/reports/daily.js"></script>
-    <script src="/scripts/reports/unsprinted.js"></script>
     <script src="/scripts/reports/label-sync.js"></script>
     <script src="/scripts/reports/olka-deploy.js"></script>
     <script src="/scripts/reports/rfr.js"></script>
     <script src="/scripts/reports/reject.js"></script>
     <script src="/scripts/reports/hdv-status.js"></script>
     <script src="/scripts/reports/olka-roadmap.js"></script>
-    <script src="/scripts/reports/mc-board.js"></script>
+    <script src="/scripts/reports/mc-board.js?v=2"></script>
     <script src="/scripts/reports/olka-sprint.js"></script>
     <script src="/scripts/reports/closed.js"></script>
     <script src="/scripts/reports/project-report.js"></script>
+    <script src="/scripts/tenant-management.js"></script>
     <script src="/scripts/tasks/task-creation.js"></script>
 </body>
 </html>

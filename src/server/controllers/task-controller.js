@@ -100,6 +100,6 @@ export async function createTask(req, res) {
   } catch (error) {
     const detail = jiraErrorMessage(error);
     console.error("Task oluşturma hatası:", detail || error.message);
-    res.status(500).json({ error: detail || error.message });
+    res.status(error.status || 500).json({ error: detail || error.message });
   }
 }

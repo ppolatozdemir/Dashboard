@@ -122,7 +122,5 @@ function renderDailyReport(data) {
 }
 
 // ========== Sprinte Alınmayan (Olka vs Hebiar) ==========
-let unsprintedSprintsLoaded = false;
-let lastUnsprintedData = null;
 
 // Mevcut sonucu şablonlu Excel (.xlsx) olarak indir

@@ -152,9 +152,12 @@ function renderProjectReport() {
 
     const projects = data.projects || [];
     if (projects.length === 0) {
+        const message = data.projectScopeCount === 0
+            ? 'Bu tenant için proje tanımlı değil.'
+            : `${escapeHtml(data.sprint.name)} sprintinde bu tenantın projelerine ait task bulunamadı.`;
         container.innerHTML = `
             <div class="rfr-empty">
-                <strong>${escapeHtml(data.sprint.name)}</strong> sprintinde task bulunamadı.
+                ${message}
             </div>
         `;
         return;
@@ -220,7 +223,7 @@ async function exportProjectReportExcel() {
         const res = await fetch('/api/project-report/export', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(lastProjectReportData)
+            body: JSON.stringify({ sprintId: lastProjectReportData.sprint.id })
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
