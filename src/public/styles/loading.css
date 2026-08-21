@@ -1,0 +1,115 @@
+.tenant-loader {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    margin-right: 15px;
+}
+
+.tenant-loader--transition {
+    width: 112px;
+    height: 112px;
+    margin: 0 0 20px;
+}
+
+.tenant-loader-emblem {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    animation: tenant-emblem-spin 1s cubic-bezier(.3, .05, .65, .95) infinite;
+    transform-origin: center;
+    will-change: transform, filter, opacity;
+}
+
+.tenant-loader-fallback {
+    display: none;
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--border-color);
+    border-left-color: var(--accent-blue);
+    border-radius: 50%;
+    animation: tenant-fallback-spin .7s linear infinite;
+}
+
+.tenant-loader--transition .tenant-loader-fallback {
+    width: 72px;
+    height: 72px;
+    border-width: 6px;
+}
+
+.tenant-loader-fallback.is-visible {
+    display: block;
+}
+
+.tenant-transition-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    background: rgba(12, 17, 36, .92);
+    background: color-mix(in srgb, #0c1124 88%, transparent);
+    backdrop-filter: blur(12px);
+}
+
+.tenant-transition-overlay[hidden] {
+    display: none;
+}
+
+.tenant-transition-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 260px;
+    padding: 32px 40px;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--modal-bg);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+}
+
+.tenant-transition-card strong {
+    font-size: 18px;
+}
+
+.tenant-transition-card span {
+    margin-top: 7px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+@keyframes tenant-emblem-spin {
+    0% {
+        transform: rotate(0deg) scale(1);
+        filter: blur(0);
+        opacity: 1;
+    }
+    18% {
+        filter: blur(1.6px);
+        opacity: .88;
+    }
+    58% {
+        transform: rotate(360deg) scale(.96);
+        filter: blur(0);
+        opacity: 1;
+    }
+    100% {
+        transform: rotate(360deg) scale(1);
+        filter: blur(0);
+        opacity: 1;
+    }
+}
+
+@keyframes tenant-fallback-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tenant-loader-emblem,
+    .tenant-loader-fallback {
+        animation-duration: 1.8s;
+    }
+}

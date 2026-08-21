@@ -329,6 +329,7 @@
 
     function renderAuthenticatedUi(user) {
         currentUser = user;
+        window.dashboardLoader.setActiveTenant(user.tenant);
         document.getElementById('authOverlay').hidden = true;
         const controls = document.querySelector('.header-controls');
         controls.insertAdjacentHTML('afterbegin', `
@@ -354,6 +355,8 @@
         if (user.role === 'OwnerAdmin' || user.role === 'TenantAdmin') {
             injectUserManagement();
         }
+        window.dashboardLoader.upgradeLoadingElements();
+        window.dashboardLoader.finishTenantTransition(user.tenant);
     }
 
     function renderTenantSwitch(user) {
@@ -375,6 +378,7 @@
     async function switchTenant(event) {
         const select = event.currentTarget;
         select.disabled = true;
+        await window.dashboardLoader.startTenantTransition(select.value);
         try {
             const response = await nativeFetch('/api/auth/tenant', {
                 method: 'POST',
@@ -388,6 +392,7 @@
         } catch (error) {
             select.value = currentUser.tenant;
             select.disabled = false;
+            window.dashboardLoader.cancelTenantTransition();
             window.alert(error.message);
         }
     }
