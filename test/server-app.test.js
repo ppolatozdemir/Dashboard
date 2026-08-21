@@ -27,7 +27,7 @@ test("health remains public", async () => {
 
 test("LAB Board logo is served from project assets", async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/assets/LABBoard.jpg`);
+    const response = await fetch(`${baseUrl}/assets/LABBoard.png`);
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type"), /^image\//);
     assert.ok((await response.arrayBuffer()).byteLength > 0);
