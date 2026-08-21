@@ -216,7 +216,19 @@ node src/index.js project list
 | `OwnerAdmin` | Tümü | Tümü | Her tenant için `TenantAdmin` |
 | `TenantAdmin` | Aktif tenant | Aktif tenant | Aktif tenant için `TenantAdmin` oluşturma ve listeleme (silme yok) |
 
-Yerel kullanıcı adları sistem genelinde benzersizdir. Şifreler düz metin tutulmaz; `scrypt` ile özetlenir. Kullanıcı–tenant ilişkileri SQLite'taki ayrı üyelik tablosunda saklanır. Varsayılan veritabanı `data/auth.db` dosyasıdır.
+Yerel kullanıcı adları ve e-posta adresleri sistem genelinde benzersizdir. Şifreler düz metin tutulmaz; `scrypt` ile özetlenir. Kullanıcı–tenant ilişkileri SQLite'taki ayrı üyelik tablosunda saklanır. Varsayılan veritabanı `data/auth.db` dosyasıdır.
+
+Yerel `TenantAdmin` hesapları için giriş ekranındaki **Şifremi unuttum** akışı OTP ile çalışır. İstekler kullanıcı varlığını açığa çıkarmadan yanıtlanır; kodlar 15 dakika geçerlidir, aynı e-posta için yeniden gönderim aralığı 3 dakikadır ve beş hatalı denemeden sonra challenge kilitlenir. Başarılı sıfırlama tüm yerel oturumları iptal eder. OTP servisine erişim yalnızca sunucu tarafındadır:
+
+```powershell
+$env:NOTIFICATION_SERVICE_URL = "https://communication.prod.hebiar.com"
+$env:NOTIFICATION_SERVICE_TOKEN = "<server-to-server-token>"
+$env:NOTIFICATION_MESSAGE_TYPE_EMAIL = "2"
+```
+
+Sunucu `POST /Notification/SendNotificationSync` endpointine `provider_type: 1` ve `message_type: 2` ile OTP e-postasını gönderir. OTP kodu Dashboard tarafından hash'lenerek yerelde doğrulanır. Yerel kullanıcı kimliği e-posta adresidir; eski `username` kolonu bulunan auth veritabanları ilk şema açılışında kullanıcıları koruyarak e-posta-temelli şemaya migrate edilir.
+
+Geçici geliştirme/test ortamında OTP cooldown, süre ve deneme sınırını devre dışı bırakmak için `PASSWORD_RESET_BYPASS_LIMITS=true` kullanılabilir. Üretimde bu değer ayarlanmamalı veya `false` olmalıdır.
 
 ### Tenant adları
 

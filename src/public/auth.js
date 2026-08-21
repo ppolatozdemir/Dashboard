@@ -62,8 +62,8 @@
                     </div>
                     <form class="auth-form active" id="companyLoginForm">
                         <div class="auth-field">
-                            <label for="companyUsername">Kullanıcı adı</label>
-                            <input id="companyUsername" autocomplete="username" required>
+                            <label for="companyEmail">E-posta</label>
+                            <input id="companyEmail" type="email" autocomplete="email" required>
                         </div>
                         <div class="auth-field">
                             <label for="companyPassword">Şifre</label>
@@ -77,8 +77,8 @@
                     </form>
                     <form class="auth-form" id="localLoginForm">
                         <div class="auth-field">
-                            <label for="localUsername">Kullanıcı adı</label>
-                            <input id="localUsername" autocomplete="username" required>
+                            <label for="localEmail">E-posta</label>
+                            <input id="localEmail" type="email" autocomplete="email" required>
                         </div>
                         <div class="auth-field">
                             <label for="localPassword">Şifre</label>
@@ -89,7 +89,36 @@
                             <select id="localTenant"></select>
                         </div>
                         <button class="auth-submit" type="submit">Giriş yap</button>
+                        <button class="auth-link" id="forgotPasswordLink" type="button">Şifremi unuttum</button>
                     </form>
+                    <div id="passwordResetPanel" hidden>
+                        <p class="auth-reset-intro">Yerel hesabınızın e-posta adresine tek kullanımlık kod göndereceğiz.</p>
+                        <form class="auth-form active" id="passwordResetRequestForm">
+                            <div class="auth-field">
+                                <label for="passwordResetEmail">E-posta</label>
+                                <input id="passwordResetEmail" type="email" autocomplete="email" required>
+                            </div>
+                            <button class="auth-submit" type="submit">Kod gönder</button>
+                        </form>
+                        <form class="auth-form" id="passwordResetVerifyForm">
+                            <div class="auth-field">
+                                <label for="passwordResetCode">E-posta kodu</label>
+                                <input id="passwordResetCode" inputmode="numeric" autocomplete="one-time-code" required>
+                            </div>
+                            <div class="auth-field">
+                                <label for="passwordResetNewPassword">Yeni şifre (en az 10 karakter)</label>
+                                <input id="passwordResetNewPassword" type="password" minlength="10" autocomplete="new-password" required>
+                            </div>
+                            <div class="auth-field">
+                                <label for="passwordResetConfirmPassword">Yeni şifre (tekrar)</label>
+                                <input id="passwordResetConfirmPassword" type="password" minlength="10" autocomplete="new-password" required>
+                            </div>
+                            <button class="auth-submit" type="submit">Şifreyi sıfırla</button>
+                            <button class="auth-link" id="passwordResetResend" type="button">Kodu yeniden gönder</button>
+                        </form>
+                        <button class="auth-link" id="passwordResetBack" type="button">Girişe dön</button>
+                        <div class="auth-error" id="passwordResetError"></div>
+                    </div>
                     <div class="auth-error" id="authError"></div>
                 </div>
             </div>
@@ -104,6 +133,11 @@
         document.getElementById('localLoginForm').addEventListener('submit', event => {
             submitLogin(event, 'local');
         });
+        document.getElementById('forgotPasswordLink').addEventListener('click', openPasswordReset);
+        document.getElementById('passwordResetBack').addEventListener('click', closePasswordReset);
+        document.getElementById('passwordResetRequestForm').addEventListener('submit', requestPasswordReset);
+        document.getElementById('passwordResetVerifyForm').addEventListener('submit', verifyAndResetPassword);
+        document.getElementById('passwordResetResend').addEventListener('click', resendPasswordReset);
     }
 
     function setAuthMethod(method) {
@@ -116,6 +150,114 @@
         document.getElementById('localLoginForm').classList.toggle('active', method === 'local');
         document.getElementById('companyTenantField').hidden = true;
         document.getElementById('localTenantField').hidden = true;
+        closePasswordReset();
+    }
+
+    function openPasswordReset() {
+        setAuthMethod('local');
+        document.getElementById('localLoginForm').classList.remove('active');
+        document.getElementById('passwordResetPanel').hidden = false;
+        document.getElementById('passwordResetError').textContent = '';
+        document.getElementById('passwordResetRequestForm').classList.add('active');
+        document.getElementById('passwordResetVerifyForm').classList.remove('active');
+    }
+
+    function closePasswordReset() {
+        const panel = document.getElementById('passwordResetPanel');
+        if (!panel) return;
+        panel.hidden = true;
+        document.getElementById('passwordResetRequestForm')?.classList.add('active');
+        document.getElementById('passwordResetVerifyForm')?.classList.remove('active');
+        document.getElementById('passwordResetError')?.replaceChildren();
+    }
+
+    async function requestPasswordReset(event) {
+        event?.preventDefault();
+        const emailInput = document.getElementById('passwordResetEmail');
+        const form = document.getElementById('passwordResetRequestForm');
+        const button = form.querySelector('button[type="submit"]');
+        const error = document.getElementById('passwordResetError');
+        const email = emailInput.value.trim();
+        button.disabled = true;
+        error.textContent = '';
+        try {
+            const response = await nativeFetch('/api/auth/password-reset/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'İşlem tamamlanamadı.');
+            document.getElementById('passwordResetVerifyForm').classList.add('active');
+            form.classList.remove('active');
+            error.textContent = data.message || 'Kod gönderildiyse e-postanızı kontrol edin.';
+            startResetResendCooldown();
+        } catch (requestError) {
+            error.textContent = requestError.message;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function verifyAndResetPassword(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const button = form.querySelector('button[type="submit"]');
+        const error = document.getElementById('passwordResetError');
+        const email = document.getElementById('passwordResetEmail').value.trim();
+        const password = document.getElementById('passwordResetNewPassword').value;
+        const confirmation = document.getElementById('passwordResetConfirmPassword').value;
+        if (password !== confirmation) {
+            error.textContent = 'Şifreler eşleşmiyor.';
+            return;
+        }
+        button.disabled = true;
+        error.textContent = '';
+        try {
+            const verifyResponse = await nativeFetch('/api/auth/password-reset/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email,
+                    otpCode: document.getElementById('passwordResetCode').value.trim()
+                })
+            });
+            const verifyData = await verifyResponse.json().catch(() => ({}));
+            if (!verifyResponse.ok) throw new Error(verifyData.error || 'Kod doğrulanamadı.');
+            const resetResponse = await nativeFetch('/api/auth/password-reset/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ resetToken: verifyData.resetToken, password })
+            });
+            const resetData = await resetResponse.json().catch(() => ({}));
+            if (!resetResponse.ok) throw new Error(resetData.error || 'Şifre sıfırlanamadı.');
+            closePasswordReset();
+            document.getElementById('localLoginForm').classList.add('active');
+            document.getElementById('authError').textContent = 'Şifreniz güncellendi. Yeni şifrenizle giriş yapabilirsiniz.';
+        } catch (resetError) {
+            error.textContent = resetError.message;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    function startResetResendCooldown() {
+        const button = document.getElementById('passwordResetResend');
+        const until = Date.now() + 3 * 60 * 1000;
+        button.disabled = true;
+        const update = () => {
+            const remaining = Math.max(0, until - Date.now());
+            button.textContent = remaining
+                ? `Kodu yeniden gönder (${Math.ceil(remaining / 1000)} sn)`
+                : 'Kodu yeniden gönder';
+            button.disabled = remaining > 0;
+            if (remaining) window.setTimeout(update, 1000);
+        };
+        update();
+    }
+
+    function resendPasswordReset() {
+        requestPasswordReset();
     }
 
     async function submitLogin(event, method) {
@@ -124,7 +266,9 @@
         const form = event.currentTarget;
         const button = form.querySelector('button[type="submit"]');
         const prefix = method === 'company' ? 'company' : 'local';
-        const username = document.getElementById(`${prefix}Username`).value.trim();
+        const email = method === 'local'
+            ? document.getElementById('localEmail').value.trim()
+            : document.getElementById('companyEmail').value.trim();
         const password = document.getElementById(`${prefix}Password`).value;
         const tenantField = document.getElementById(`${prefix}TenantField`);
         const tenant = tenantField.hidden
@@ -134,7 +278,7 @@
         error.textContent = '';
         button.disabled = true;
         button.textContent = 'Giriş yapılıyor...';
-        loginState = { method, username, password };
+        loginState = { method, email, password };
 
         try {
             const endpoint = method === 'company'
@@ -143,7 +287,9 @@
             const response = await nativeFetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, tenant })
+                body: JSON.stringify(method === 'local'
+                    ? { email, password, tenant }
+                    : { username: email, password, tenant })
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Giriş yapılamadı.');
@@ -284,7 +430,7 @@
                     </div>
                     <form class="user-form" id="createAuthUserForm">
                         <div class="auth-field"><label for="authDisplayName">Ad soyad</label><input id="authDisplayName" required></div>
-                        <div class="auth-field"><label for="authUsername">Kullanıcı adı</label><input id="authUsername" autocomplete="off" required></div>
+                        <div class="auth-field"><label for="authEmail">E-posta</label><input id="authEmail" type="email" autocomplete="email" required></div>
                         <div class="auth-field">
                             <label for="authUserPassword">Geçici şifre (en az 10 karakter)</label>
                             <input id="authUserPassword" type="password" minlength="10" autocomplete="new-password" required>
@@ -369,14 +515,15 @@
             const showTenant = window.authUserListOptions?.showTenant;
             const canDelete = window.authUserListOptions?.canDelete;
             const actionColumn = canDelete ? '<th></th>' : '';
-            const emptyColspan = (showTenant ? 3 : 2) + (canDelete ? 1 : 0);
+            const emptyColspan = (showTenant ? 4 : 3) + (canDelete ? 1 : 0);
             container.innerHTML = `
                 <table class="user-table">
-                    <thead><tr><th>Kullanıcı</th><th>Rol</th>${showTenant ? '<th>Tenant</th>' : ''}${actionColumn}</tr></thead>
+                    <thead><tr><th>Kullanıcı</th><th>E-posta</th><th>Rol</th>${showTenant ? '<th>Tenant</th>' : ''}${actionColumn}</tr></thead>
                     <tbody>
                         ${data.users.map(user => `
                             <tr>
-                                <td><strong>${escapeHtml(user.displayName)}</strong><br><span class="auth-user-meta">${escapeHtml(user.username)}</span></td>
+                                <td><strong>${escapeHtml(user.displayName)}</strong></td>
+                                <td><div class="user-email-editor"><input class="user-email" type="email" value="${escapeHtml(user.email)}" data-email-user-id="${escapeHtml(user.id)}"><button class="user-email-save" type="button" data-email-user-id="${escapeHtml(user.id)}">Kaydet</button></div></td>
                                 <td>${escapeHtml(user.role)}</td>
                                 ${showTenant ? `<td>${user.tenants.map(tenant => escapeHtml(tenantName(tenant))).join(', ')}</td>` : ''}
                                 ${canDelete ? `<td><button class="user-delete" type="button" data-user-id="${escapeHtml(user.id)}">Sil</button></td>` : ''}
@@ -387,6 +534,9 @@
             `;
             container.querySelectorAll('[data-user-id]').forEach(button => {
                 button.addEventListener('click', () => deleteUser(button.dataset.userId));
+            });
+            container.querySelectorAll('.user-email-save').forEach(element => {
+                element.addEventListener('click', () => updateUserEmail(element.dataset.emailUserId));
             });
         } catch (error) {
             container.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
@@ -400,7 +550,7 @@
         const tenant = document.getElementById('authUserTenant')?.value || currentUser.tenant;
         const body = {
             displayName: document.getElementById('authDisplayName').value.trim(),
-            username: document.getElementById('authUsername').value.trim(),
+            email: document.getElementById('authEmail').value.trim(),
             password: document.getElementById('authUserPassword').value,
             role: document.getElementById('authUserRole').value,
             tenants: [tenant]
@@ -419,6 +569,23 @@
             await loadUsers();
         } catch (error) {
             message.textContent = error.message;
+        }
+    }
+
+    async function updateUserEmail(userId) {
+        const input = document.querySelector(`input[data-email-user-id="${CSS.escape(userId)}"]`);
+        if (!input) return;
+        try {
+            const response = await nativeFetch(`/api/auth/users/${encodeURIComponent(userId)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: input.value.trim() })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'E-posta güncellenemedi.');
+            input.value = data.user.email;
+        } catch (error) {
+            window.alert(error.message);
         }
     }
 

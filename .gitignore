@@ -10,10 +10,13 @@ node_modules/
 # Environment / secrets
 .env
 .env.*
+!.env.example
 
 # Local auth database
 data/*.db
 data/*.db-*
+src/data/*.db
+src/data/*.db-*
 
 # OS files
 .DS_Store

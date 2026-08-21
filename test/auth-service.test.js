@@ -12,7 +12,7 @@ import {
 
 const owner = {
   id: "owner-1",
-  username: "owner@commercelab.com.tr",
+  email: "owner@commercelab.com.tr",
   role: ROLES.OWNER_ADMIN,
   tenant: "CL",
   source: "commercelab",
@@ -21,6 +21,14 @@ const owner = {
 
 function createService() {
   return new AuthService({ dbPath: ":memory:" });
+}
+
+function createResetService(notificationClient, options = {}) {
+  return new AuthService({
+    dbPath: ":memory:",
+    notificationClient,
+    ...options,
+  });
 }
 
 test("CommerceLab login tenant options remain fixed and ordered", () => {
@@ -35,6 +43,152 @@ test("CommerceLab login tenant options remain fixed and ordered", () => {
     "CL",
     "HD",
   ]);
+});
+
+test("Password reset is enumeration-safe, rate limited, and revokes local sessions", async () => {
+  const sent = [];
+  const notificationClient = {
+    async sendNotification(request) {
+      sent.push(request);
+    },
+  };
+  const service = createResetService(notificationClient);
+  const actor = {
+    ...owner,
+    role: ROLES.OWNER_ADMIN,
+  };
+  try {
+    const user = service.createUser(actor, {
+      email: "reset@example.com",
+      displayName: "Reset User",
+      password: "old-password-123",
+      role: ROLES.TENANT_ADMIN,
+      tenants: ["KLD"],
+    });
+
+    const login = service.localLogin({
+      email: "reset@example.com",
+      password: "old-password-123",
+      tenant: "KLD",
+    });
+
+    const response = await service.requestPasswordReset({
+      email: "reset@example.com",
+      requestIp: "127.0.0.1",
+    });
+    assert.match(response.message, /kayıtlıysa/);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].email, "reset@example.com");
+    await service.requestPasswordReset({
+      email: "reset@example.com",
+      requestIp: "127.0.0.1",
+    });
+    assert.equal(sent.length, 1);
+    await service.requestPasswordReset({
+      email: "nobody@example.com",
+      requestIp: "127.0.0.1",
+    });
+    assert.equal(sent.length, 1);
+
+    const verificationRequest = sent[0];
+    const otpCode = verificationRequest.otpCode;
+    const verification = await service.verifyPasswordReset({
+      email: "reset@example.com",
+      otpCode,
+    });
+    service.resetPassword({
+      resetToken: verification.resetToken,
+      password: "new-password-123",
+    });
+    assert.throws(
+      () =>
+        service.resetPassword({
+          resetToken: verification.resetToken,
+          password: "another-password-123",
+        }),
+      /geçersiz veya süresi dolmuş/,
+    );
+    assert.equal(service.getLocalSession(login.token), null);
+    assert.equal(
+      service.localLogin({
+        email: "reset@example.com",
+        password: "new-password-123",
+        tenant: "KLD",
+      }).kind,
+      "authenticated",
+    );
+  } finally {
+    service.close();
+  }
+});
+
+test("Password reset limits can be bypassed explicitly", async () => {
+  const sent = [];
+  const service = createResetService(
+    {
+      async sendNotification(request) {
+        sent.push(request);
+      },
+    },
+    { passwordResetBypassLimits: true },
+  );
+  try {
+    service.createUser(owner, {
+      email: "bypass@example.com",
+      displayName: "Bypass User",
+      password: "old-password-123",
+      role: ROLES.TENANT_ADMIN,
+      tenants: ["KLD"],
+    });
+
+    await service.requestPasswordReset({
+      email: "bypass@example.com",
+      requestIp: "127.0.0.2",
+    });
+    await service.requestPasswordReset({
+      email: "bypass@example.com",
+      requestIp: "127.0.0.2",
+    });
+
+    assert.equal(sent.length, 2);
+  } finally {
+    service.close();
+  }
+});
+
+test("User email updates are validated and scoped to the actor tenant", () => {
+  const service = createService();
+  try {
+    const user = service.createUser(owner, {
+      email: "old@example.com",
+      displayName: "Editable User",
+      password: "strong-pass-123",
+      role: ROLES.TENANT_ADMIN,
+      tenants: ["KLD"],
+    });
+    const tenantAdmin = {
+      id: "tenant-admin",
+      email: "admin@example.com",
+      role: ROLES.TENANT_ADMIN,
+      tenant: "KLD",
+      source: "local",
+    };
+    assert.equal(
+      service.updateUser(tenantAdmin, user.id, {
+        email: "new@example.com",
+      }).email,
+      "new@example.com",
+    );
+    assert.throws(
+      () =>
+        service.updateUser(tenantAdmin, user.id, {
+          email: "not-an-email",
+        }),
+      /Geçerli bir e-posta/,
+    );
+  } finally {
+    service.close();
+  }
 });
 
 test("OLKA and HD aliases resolve to their backend tenant scopes", () => {
@@ -143,7 +297,7 @@ test("OwnerAdmin creates a multi-tenant user and login requires tenant selection
   const service = createService();
   try {
     const user = service.createUser(owner, {
-      username: "admin@example.com",
+      email: "admin@example.com",
       displayName: "Tenant Admin",
       password: "strong-pass-123",
       role: ROLES.TENANT_ADMIN,
@@ -153,7 +307,7 @@ test("OwnerAdmin creates a multi-tenant user and login requires tenant selection
     assert.deepEqual(user.tenants, ["ABC", "KLD"]);
 
     const firstStep = service.localLogin({
-      username: "admin@example.com",
+      email: "admin@example.com",
       password: "strong-pass-123",
     });
     assert.deepEqual(firstStep, {
@@ -162,7 +316,7 @@ test("OwnerAdmin creates a multi-tenant user and login requires tenant selection
     });
 
     const secondStep = service.localLogin({
-      username: "admin@example.com",
+      email: "admin@example.com",
       password: "strong-pass-123",
       tenant: "KLD",
     });
@@ -182,7 +336,7 @@ test("TenantAdmin creates users only for its own tenant", () => {
   const service = createService();
   const tenantAdmin = {
     id: "admin-1",
-    username: "admin@example.com",
+    email: "admin@example.com",
     role: ROLES.TENANT_ADMIN,
     tenant: "KLD",
     source: "local",
@@ -190,7 +344,7 @@ test("TenantAdmin creates users only for its own tenant", () => {
 
   try {
     const created = service.createUser(tenantAdmin, {
-      username: "admin2@example.com",
+      email: "admin2@example.com",
       displayName: "Second Admin",
       password: "strong-pass-123",
       role: ROLES.TENANT_ADMIN,
@@ -202,7 +356,7 @@ test("TenantAdmin creates users only for its own tenant", () => {
     assert.throws(
       () =>
         service.createUser(tenantAdmin, {
-          username: "admin3@example.com",
+          email: "admin3@example.com",
           displayName: "Other Tenant Admin",
           password: "strong-pass-123",
           role: ROLES.TENANT_ADMIN,
@@ -219,7 +373,7 @@ test("TenantAdmin lists only its own tenant users", () => {
   const service = createService();
   try {
     service.createUser(owner, {
-      username: "admin@example.com",
+      email: "admin@example.com",
       displayName: "Shared Admin",
       password: "strong-pass-123",
       role: ROLES.TENANT_ADMIN,
@@ -234,7 +388,7 @@ test("TenantAdmin lists only its own tenant users", () => {
       allowedTenants: undefined,
     });
     assert.equal(users.length, 1);
-    assert.equal(users[0].username, "admin@example.com");
+    assert.equal(users[0].email, "admin@example.com");
   } finally {
     service.close();
   }
@@ -244,14 +398,14 @@ test("Removing a tenant membership invalidates its active local session", () => 
   const service = createService();
   try {
     const user = service.createUser(owner, {
-      username: "admin@example.com",
+      email: "admin@example.com",
       displayName: "Shared Admin",
       password: "strong-pass-123",
       role: ROLES.TENANT_ADMIN,
       tenants: ["KLD", "ABC"],
     });
     const login = service.localLogin({
-      username: "admin@example.com",
+      email: "admin@example.com",
       password: "strong-pass-123",
       tenant: "KLD",
     });
@@ -357,7 +511,7 @@ test("CL TenantAdmin creates users within its allowed tenants", () => {
   const service = createService();
   const tenantAdmin = {
     id: "company-admin-1",
-    username: "admin@commercelab.com.tr",
+    email: "admin@commercelab.com.tr",
     role: ROLES.TENANT_ADMIN,
     tenant: "CL",
     source: "commercelab",
@@ -366,7 +520,7 @@ test("CL TenantAdmin creates users within its allowed tenants", () => {
 
   try {
     const created = service.createUser(tenantAdmin, {
-      username: "mcc-admin@example.com",
+      email: "mcc-admin@example.com",
       displayName: "MCC Admin",
       password: "strong-pass-123",
       role: ROLES.TENANT_ADMIN,
@@ -377,7 +531,7 @@ test("CL TenantAdmin creates users within its allowed tenants", () => {
     assert.throws(
       () =>
         service.createUser(tenantAdmin, {
-          username: "other-admin@example.com",
+          email: "other-admin@example.com",
           displayName: "Other Admin",
           password: "strong-pass-123",
           role: ROLES.TENANT_ADMIN,
@@ -544,14 +698,14 @@ test("Non-CL tenant cannot create a user in another tenant", () => {
         service.createUser(
           {
             id: "mcc-owner",
-            username: "owner@mcc.example",
+            email: "owner@mcc.example",
             role: ROLES.OWNER_ADMIN,
             tenant: "MCC",
             source: "commercelab",
             allowedTenants: ["MCC", "HDV"],
           },
           {
-            username: "hdv-admin@example.com",
+            email: "hdv-admin@example.com",
             displayName: "HDV Admin",
             password: "strong-pass-123",
             role: ROLES.TENANT_ADMIN,
@@ -571,7 +725,7 @@ test("Local users cannot be assigned to the CL tenant", () => {
     assert.throws(
       () =>
         service.createUser(owner, {
-          username: "cl-admin@example.com",
+          email: "cl-admin@example.com",
           displayName: "CL Admin",
           password: "strong-pass-123",
           role: ROLES.TENANT_ADMIN,

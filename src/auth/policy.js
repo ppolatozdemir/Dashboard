@@ -3,8 +3,9 @@ import { AuthError } from "./error.js";
 import {
   hasGlobalTenantAccess,
   normalizeTenant,
+  normalizeEmail,
   normalizeText,
-  normalizeUsername,
+  isValidEmail,
 } from "./normalization.js";
 
 const LOCAL_CREATABLE_ROLES = new Set([ROLES.TENANT_ADMIN]);
@@ -24,7 +25,7 @@ function normalizeUserInput(input) {
     ? input.tenants.map(normalizeTenant).filter(Boolean)
     : [];
   return {
-    username: normalizeUsername(input.username),
+    email: normalizeEmail(input.email),
     displayName: normalizeText(input.displayName),
     role: normalizeText(input.role),
     password: input.password || "",
@@ -33,9 +34,18 @@ function normalizeUserInput(input) {
 }
 
 function validateUserInput(user) {
-  const { username, displayName, role, password, tenants } = user;
-  if (!username || !displayName || !role || !password || tenants.length === 0) {
+  const { email, displayName, role, password, tenants } = user;
+  if (
+    !email ||
+    !displayName ||
+    !role ||
+    !password ||
+    tenants.length === 0
+  ) {
     throw new AuthError(400, "Tüm kullanıcı alanları zorunludur");
+  }
+  if (!isValidEmail(email)) {
+    throw new AuthError(400, "Geçerli bir e-posta adresi girilmelidir");
   }
   if (!LOCAL_CREATABLE_ROLES.has(role)) {
     throw new AuthError(400, "Geçersiz kullanıcı rolü");

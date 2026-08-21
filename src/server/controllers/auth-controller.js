@@ -191,3 +191,52 @@ export function deleteUser(req, res) {
     authService.sendError(res, error);
   }
 }
+
+export function updateUser(req, res) {
+  try {
+    const user = authService.updateUser(
+      req.auth,
+      req.params.userId,
+      req.body || {},
+    );
+    res.json({ user });
+  } catch (error) {
+    authService.sendError(res, error);
+  }
+}
+
+export async function requestPasswordReset(req, res) {
+  try {
+    const result = await authService.requestPasswordReset({
+      email: req.body?.email,
+      requestIp: req.ip,
+    });
+    res.status(202).json(result);
+  } catch (error) {
+    authService.sendError(res, error);
+  }
+}
+
+export async function verifyPasswordReset(req, res) {
+  try {
+    const result = await authService.verifyPasswordReset({
+      email: req.body?.email,
+      otpCode: req.body?.otpCode,
+    });
+    res.json(result);
+  } catch (error) {
+    authService.sendError(res, error);
+  }
+}
+
+export function resetPassword(req, res) {
+  try {
+    authService.resetPassword({
+      resetToken: req.body?.resetToken,
+      password: req.body?.password,
+    });
+    res.status(204).end();
+  } catch (error) {
+    authService.sendError(res, error);
+  }
+}

@@ -49,6 +49,26 @@
     cursor: pointer;
 }
 
+.auth-link {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #9daeff;
+    cursor: pointer;
+    text-align: left;
+}
+
+.auth-link:disabled {
+    color: rgba(255, 255, 255, 0.45);
+    cursor: wait;
+}
+
+.auth-reset-intro {
+    margin: 0 0 18px;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 13px;
+}
+
 .auth-method.active,
 .auth-submit {
     border-color: #4361ee;
@@ -165,6 +185,31 @@
     border-radius: 6px;
     background: var(--accent-red);
     color: #fff;
+    cursor: pointer;
+}
+
+.user-email-editor {
+    display: flex;
+    gap: 6px;
+    min-width: 260px;
+}
+
+.user-email {
+    width: 100%;
+    min-width: 0;
+    padding: 7px 9px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+}
+
+.user-email-save {
+    padding: 7px 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text-primary);
     cursor: pointer;
 }
 

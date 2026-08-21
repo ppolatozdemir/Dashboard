@@ -4,8 +4,16 @@ export function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function normalizeUsername(value) {
-  return normalizeText(value).toLocaleLowerCase("tr-TR");
+export function normalizeEmail(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+export function isValidEmail(value) {
+  const email = normalizeEmail(value);
+  return (
+    email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  );
 }
 
 export function normalizeTenant(value) {
@@ -30,7 +38,7 @@ export function resolveRole(value) {
 export function publicUser(row) {
   return {
     id: row.id,
-    username: row.username,
+    email: row.email,
     displayName: row.display_name,
     role: row.role,
     isActive: Boolean(row.is_active),
