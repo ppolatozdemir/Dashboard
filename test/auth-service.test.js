@@ -30,6 +30,7 @@ function createResetService(notificationClient, options = {}) {
   return new AuthService({
     dbPath: ":memory:",
     notificationClient,
+    passwordResetBypassLimits: false,
     ...options,
   });
 }

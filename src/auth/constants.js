@@ -68,7 +68,6 @@ const TASK_TENANT_ALIASES = Object.freeze({
 });
 
 const TENANT_ADMIN_PAGES = Object.freeze([
-  PAGES.UNSPRINTED,
   PAGES.RFR,
   PAGES.REJECT,
   PAGES.OLKA_SPRINT,
@@ -87,6 +86,7 @@ const OLKA_PAGES = Object.freeze([
   PAGES.LABEL_SYNC,
   PAGES.OLKA_DEPLOY,
   PAGES.OLKA_ROADMAP,
+  PAGES.UNSPRINTED
 ]);
 
 function normalizeCompanyTenant(tenant) {
