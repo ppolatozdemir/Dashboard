@@ -117,9 +117,6 @@ export class AuthRepository {
   }
 
   migrateUsersToEmailIdentity() {
-    this.db.exec(
-      "UPDATE auth_users SET email = LOWER(username) WHERE email IS NULL OR TRIM(email) = ''",
-    );
     this.db.pragma("foreign_keys = OFF");
     try {
       this.db.transaction(() => {
@@ -141,9 +138,10 @@ export class AuthRepository {
             role, is_active, created_by, created_at, updated_at
           )
           SELECT
-            id, email, display_name, password_salt, password_hash,
+            id, LOWER(username), display_name, password_salt, password_hash,
             role, is_active, created_by, created_at, updated_at
-          FROM auth_users;
+          FROM auth_users
+          WHERE role = 'TenantAdmin';
           DROP TABLE auth_users;
           ALTER TABLE auth_users_email_identity RENAME TO auth_users;
         `);
